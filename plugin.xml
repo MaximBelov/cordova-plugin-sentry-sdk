@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.0">
+  <name>SentryNative</name>
+  <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
+
+  <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.52.0" />
+
+  <engines>
+    <engine name="cordova-ios" version=">=8.0.0" />
+    <engine name="cordova-android" version=">=12.0.0" />
+  </engines>
+
+  <js-module src="www/sentryNative.js" name="SentryNative">
+    <clobbers target="window.SentryNative" />
+  </js-module>
+
+  <platform name="android">
+    <config-file target="res/xml/config.xml" parent="/*">
+      <feature name="SentryNative">
+        <param name="android-package" value="io.github.maximbelov.sentry.SentryNative" />
+      </feature>
+    </config-file>
+
+    <!-- The SDK is started from `start`, with the DSN the page passes, never from the manifest. -->
+    <config-file target="AndroidManifest.xml" parent="/manifest/application">
+      <meta-data android:name="io.sentry.auto-init" android:value="false" />
+    </config-file>
+
+    <framework src="io.sentry:sentry-android:$SENTRY_ANDROID_SDK_VERSION" />
+    <!-- The "new app directory structure" form: for a .kt file cordova-android copies to app/src/main/<target-dir>
+         verbatim, and only a .java file is rewritten from src/ into java/. kotlin-android compiles src/main/kotlin. -->
+    <source-file src="src/android/SentryNative.kt" target-dir="app/src/main/kotlin/io.github.maximbelov.sentry" />
+  </platform>
+
+  <!-- A Swift package (cordova-ios 8): Package.swift at the root takes sentry-cocoa from SPM, which
+       serves every release as a prebuilt xcframework. The CocoaPods trunk stopped at 9.19.1. -->
+  <platform name="ios" package="swift">
+    <config-file target="config.xml" parent="/*">
+      <feature name="SentryNative">
+        <param name="ios-package" value="SentryNative" />
+      </feature>
+    </config-file>
+  </platform>
+</plugin>

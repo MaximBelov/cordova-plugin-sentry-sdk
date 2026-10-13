@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "commonjs",
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src/www",
+    "outDir": "www",
+    "skipLibCheck": true
+  },
+  "include": ["src/www/**/*.ts"]
+}

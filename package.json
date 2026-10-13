@@ -1,0 +1,48 @@
+{
+  "name": "cordova-plugin-sentry-sdk",
+  "version": "0.1.0",
+  "description": "Starts the native Sentry SDKs (sentry-cocoa, sentry-android) through their public API and keeps the user, tags and contexts your JavaScript SDK sets in sync, so a native crash is reported with the context of the session it happened in",
+  "license": "Apache-2.0",
+  "cordova": {
+    "id": "cordova-plugin-sentry-sdk",
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaximBelov/cordova-plugin-sentry-sdk.git"
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-ios",
+    "cordova-android",
+    "sentry"
+  ],
+  "files": [
+    "www",
+    "src",
+    "types",
+    "plugin.xml",
+    "README.md",
+    "LICENSE"
+  ],
+  "types": "types/index.d.ts",
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  },
+  "bugs": {
+    "url": "https://github.com/MaximBelov/cordova-plugin-sentry-sdk/issues"
+  },
+  "homepage": "https://github.com/MaximBelov/cordova-plugin-sentry-sdk#readme",
+  "author": {
+    "name": "Maxim Belov"
+  }
+}
