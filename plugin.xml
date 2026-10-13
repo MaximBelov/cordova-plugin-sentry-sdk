@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.0">
+<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.1">
   <name>SentryNative</name>
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
