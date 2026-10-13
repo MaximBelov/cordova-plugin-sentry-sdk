@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.1">
+<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.2">
   <name>SentryNative</name>
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
@@ -19,6 +19,12 @@
       <feature name="SentryNative">
         <param name="android-package" value="io.github.maximbelov.sentry.SentryNative" />
       </feature>
+      <!-- The plugin is Kotlin. cordova-android reads these from the platform's merged config.xml at prepare (lib/prepare.js,
+           updateUserProjectGradlePropertiesConfig), so an app that never set them still compiles the plugin; an app that did
+           keeps its own version, because the app's config.xml wins over a plugin's. Without this the .kt is skipped in silence
+           and every call times out. -->
+      <preference name="GradlePluginKotlinEnabled" value="true" />
+      <preference name="GradlePluginKotlinVersion" value="2.1.0" />
     </config-file>
 
     <!-- The SDK is started from `start`, with the DSN the page passes, never from the manifest. -->
@@ -39,6 +45,11 @@
       <feature name="SentryNative">
         <param name="ios-package" value="SentryNative" />
       </feature>
+      <!-- sentry-cocoa 9 needs iOS 15, and cordova-ios 8 creates an app for iOS 13: without this the build fails with
+           "requires minimum platform version 15.0 ... but this target supports 13.0". A preference the app declares INSIDE
+           its <platform name="ios"> block wins over this root-level one (cordova-common reads the platform's first), so an
+           app on a higher target keeps it. -->
+      <preference name="deployment-target" value="15.0" />
     </config-file>
   </platform>
 </plugin>

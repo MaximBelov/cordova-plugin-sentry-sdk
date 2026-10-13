@@ -1,0 +1,74 @@
+# Weekly updates for everything this repository depends on. Dependabot reads this file from the default branch only.
+#
+# cordova-android and cordova-ios (npm) and org.apache.cordova:framework (Gradle, test/android) are released together and belong
+# together; so do the sentry-cocoa pin (Package.swift, test/ios/Package.swift) and io.sentry:sentry-android (plugin.xml,
+# test/android): when one of a pair moves, move the other in the same step (test/unit/platform-parity.test.mjs says when they differ).
+version: 2
+
+updates:
+  # the workflows in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies]
+
+  # the plugin's dev dependencies: the cordova CLI, the platforms, cordova-paramedic and TypeScript
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      cordova:
+        patterns: ['cordova', 'cordova-*']
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  # the demo app's platforms
+  - package-ecosystem: npm
+    directory: /demo
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      cordova:
+        patterns: ['cordova', 'cordova-*']
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  # the Android JVM tests (test/android): the Gradle plugins, Robolectric, JUnit, Mockito, cordova's framework, sentry-android
+  - package-ecosystem: gradle
+    directory: /test/android
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      android-tests:
+        patterns: ['*']
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  # sentry-cocoa, pinned in the plugin's own Package.swift and in the iOS tests'
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+  - package-ecosystem: swift
+    directory: /test/ios
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]

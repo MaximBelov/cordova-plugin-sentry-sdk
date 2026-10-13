@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: gap: https: 'unsafe-inline'; connect-src *" />
+  <title>SentryDemo</title>
+  <style>
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: env(safe-area-inset-top) 16px 24px; }
+    h1 { font-size: 20px; margin: 16px 0 8px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 14px; margin: 4px 0 8px; }
+    button { display: block; width: 100%; margin: 8px 0; padding: 14px; font-size: 16px; border: 0; border-radius: 10px; background: #362d59; color: #fff; }
+    button.danger { background: #b00; }
+    pre { background: #111; color: #9f9; padding: 10px; border-radius: 8px; min-height: 160px; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+    .state { font-size: 13px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Sentry SDK (native)</h1>
+  <div class="state" id="state">waiting for deviceready</div>
+  <label>DSN <input id="dsn" data-cy="dsn" placeholder="https://key@o0.ingest.sentry.io/0" /></label>
+  <button id="start" data-cy="start">start</button>
+  <button id="setUser" data-cy="setUser">setUser (id 42)</button>
+  <button id="clearUser" data-cy="clearUser">setUser (null)</button>
+  <button id="setTags" data-cy="setTags">setTags (region IE, premium true)</button>
+  <button id="setContext" data-cy="setContext">setContext (account)</button>
+  <button id="crash" class="danger" data-cy="crash">crash (the app goes down; relaunch and start again)</button>
+  <button id="clear" data-cy="clear">Clear log</button>
+  <pre id="log" data-cy="log"></pre>
+  <script src="cordova.js"></script>
+  <script>
+    var logEl = document.getElementById('log');
+    // Every call writes one line, "<call>: ok <result>" or "<call>: fail <reason>", so a probe can read the outcome off the page.
+    window.results = [];
+    function show(call, kind, value) {
+      var text = typeof value === 'string' ? value : JSON.stringify(value);
+      window.results.push({ call: call, kind: kind, value: value, at: Date.now() });
+      logEl.textContent = call + ': ' + kind + ' ' + text + '\n' + logEl.textContent;
+    }
+    function run(call, fn) {
+      document.getElementById(call).addEventListener('click', function () {
+        Promise.resolve()
+          .then(fn)
+          .then(function (result) { show(call, 'ok', result === undefined ? '' : result); })
+          .catch(function (error) { show(call, 'fail', String(error)); });
+      });
+    }
+    document.addEventListener('deviceready', function () {
+      document.getElementById('state').textContent = 'ready: ' + cordova.platformId + ', SentryNative ' + (window.SentryNative ? 'present' : 'MISSING');
+      var dsnEl = document.getElementById('dsn');
+      try { dsnEl.value = localStorage.getItem('dsn') || ''; } catch (e) {}
+      run('start', function () {
+        try { localStorage.setItem('dsn', dsnEl.value); } catch (e) {}
+        return SentryNative.start({ dsn: dsnEl.value, release: 'sentry-demo@1.0.0', environment: 'demo', appHangTimeoutInterval: 7 });
+      });
+      run('setUser', function () { return SentryNative.setUser({ id: '42', email: 'demo@example.com', username: 'demo' }); });
+      run('clearUser', function () { return SentryNative.setUser(null); });
+      run('setTags', function () { return SentryNative.setTags({ 'account.region': 'IE', premium: true, gone: null }); });
+      run('setContext', function () { return SentryNative.setContext('account', { animals: 120, premium: true }); });
+      run('crash', function () { return SentryNative.crash(); });
+      document.getElementById('clear').addEventListener('click', function () { logEl.textContent = ''; window.results = []; });
+    });
+  </script>
+</body>
+</html>

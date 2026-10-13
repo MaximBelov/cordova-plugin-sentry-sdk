@@ -19,20 +19,24 @@ import Sentry
             reply(command, ok: true, "already started")
             return
         }
-        SentrySDK.start { sentryOptions in
-            sentryOptions.dsn = dsn
-            if let release = options["release"] as? String { sentryOptions.releaseName = release }
-            if let environment = options["environment"] as? String { sentryOptions.environment = environment }
-            if let dist = options["dist"] as? String { sentryOptions.dist = dist }
-            sentryOptions.enableAppHangTracking = (options["enableAppHangTracking"] as? Bool) ?? true
-            if let interval = options["appHangTimeoutInterval"] as? Double { sentryOptions.appHangTimeoutInterval = interval }
-            // The SDK's default is true, and in a web view it turns every failed HTTP request into an event,
-            // which buries the crashes; the page's own SDK already reports what it wants to.
-            sentryOptions.enableCaptureFailedRequests = (options["enableCaptureFailedRequests"] as? Bool) ?? false
-            sentryOptions.enableAutoSessionTracking = (options["enableAutoSessionTracking"] as? Bool) ?? true
-        }
+        SentrySDK.start { SentryNative.configure($0, from: options) }
         started = true
         reply(command, ok: true, "started")
+    }
+
+    /// The options the page passes, applied to the SDK's. On its own so the mapping can be tested without a running SDK.
+    static func configure(_ sentryOptions: Options, from options: [String: Any]) {
+        sentryOptions.dsn = options["dsn"] as? String
+        if let release = options["release"] as? String { sentryOptions.releaseName = release }
+        if let environment = options["environment"] as? String { sentryOptions.environment = environment }
+        if let dist = options["dist"] as? String { sentryOptions.dist = dist }
+        sentryOptions.enableAppHangTracking = (options["enableAppHangTracking"] as? Bool) ?? true
+        // NSNumber, not Double: a JSON 7 arrives as an integer NSNumber, which `as? Double` refuses.
+        if let interval = options["appHangTimeoutInterval"] as? NSNumber { sentryOptions.appHangTimeoutInterval = interval.doubleValue }
+        // The SDK's default is true, and in a web view it turns every failed HTTP request into an event,
+        // which buries the crashes; the page's own SDK already reports what it wants to.
+        sentryOptions.enableCaptureFailedRequests = (options["enableCaptureFailedRequests"] as? Bool) ?? false
+        sentryOptions.enableAutoSessionTracking = (options["enableAutoSessionTracking"] as? Bool) ?? true
     }
 
     @objc(setUser:)

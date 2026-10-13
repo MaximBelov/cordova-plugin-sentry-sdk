@@ -17,16 +17,24 @@ hybrid-SDK headers that every major version of sentry-cocoa reshuffles, and its 
 replaced the browser SDK's default integrations with its own. A plugin that calls only
 `SentrySDK.start`, `setUser` and `configureScope` has nothing to break on the next major.
 
-## Install
+## Supported platforms
+
+| Platform | SDK | How it is taken | Minimum |
+| --- | --- | --- | --- |
+| iOS | sentry-cocoa 9.30.1 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8, iOS 15 |
+| Android | sentry-android 8.52.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 12, Kotlin enabled |
+
+The plugin enables Kotlin in the Android build and sets the iOS deployment target to 15.0 through its own `plugin.xml`
+(an app that declares a higher target inside its `<platform name="ios">` block keeps it). The CocoaPods trunk stopped
+at sentry-cocoa 9.19.1, which is why iOS is a Swift package.
+
+## Installing
 
 ```sh
 cordova plugin add cordova-plugin-sentry-sdk
 ```
 
-`SENTRY_ANDROID_SDK_VERSION` (default `8.52.0`) picks `io.sentry:sentry-android` from Maven; Kotlin must
-be enabled in the Android build (`<preference name="GradlePluginKotlinEnabled" value="true" />`).
-On iOS the plugin is a Swift package (cordova-ios 8+): `Package.swift` pins sentry-cocoa, which SPM
-serves as a prebuilt xcframework, so nothing is compiled from source and no CocoaPods is involved.
+Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.52.0`). The iOS version is pinned in `Package.swift`.
 
 ## Use
 
@@ -44,15 +52,25 @@ document.addEventListener('deviceready', async () => {
 });
 ```
 
-| Call | What it does |
-| --- | --- |
-| `start(options)` | `SentrySDK.start` / `SentryAndroid.init` with the DSN, release, environment and dist. A second call answers "already started" and changes nothing. |
-| `setUser(user \| null)` | sets or clears the user on the native scope |
-| `setTags({ key: value \| null })` | sets tags; a `null` value removes the tag |
-| `setContext(key, object \| null)` | sets or removes a named context |
-| `crash()` | crashes the process natively. For a device test only; the promise never resolves |
+Every call returns a promise. Native answers through Cordova's callbacks, and a refused call (no DSN,
+no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`window.SentryNative`).
 
-### Options
+# API
+
+- [SentryNative.start](#start)
+- [SentryNative.setUser](#setUser)
+- [SentryNative.setTags](#setTags)
+- [SentryNative.setContext](#setContext)
+- [SentryNative.crash](#crash)
+
+## start
+
+`start(options): Promise<string>`
+
+`SentrySDK.start` / `SentryAndroid.init` with the options below. Answers `started`; a second call
+answers `already started` and changes nothing. Call it once, after `deviceready`, on **every
+launch**: sentry-cocoa sends a crash report on the next start of the SDK, so an app that starts it
+only sometimes loses the crashes in between.
 
 | Option | Default | Platform |
 | --- | --- | --- |
@@ -64,6 +82,34 @@ document.addEventListener('deviceready', async () => {
 | `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`; in a web view it turns every failed HTTP request into an event) | iOS |
 | `enableAnrTracking` | `true` | Android |
 
+## setUser
+
+`setUser(user | null): Promise<string>`
+
+Sets the user on the native scope (`id`, `email`, `username`), or clears it with `null`. Answers
+`set` or `cleared`.
+
+## setTags
+
+`setTags({ key: value | null }): Promise<string>`
+
+Sets tags on the native scope; a `null` value removes that tag. A boolean reaches Sentry as `true`
+or `false`, a number as its text. Answers `set`.
+
+## setContext
+
+`setContext(key, object | null): Promise<string>`
+
+Sets a named context (an object) on the native scope, or removes it with `null`. Answers `set`.
+
+## crash
+
+`crash(): Promise<never>`
+
+Crashes the process natively: `SentrySDK.crash()` on iOS, an uncaught exception on the main thread
+on Android. For a device test only; the promise never resolves, the app is gone. The native SDK
+sends the report on the **next launch**, so relaunch and start the SDK again before looking in Sentry.
+
 ## What arrives, and what does not
 
 Native events carry the native SDK's own device and OS contexts plus whatever you set through this
@@ -71,11 +117,34 @@ plugin. They are separate from the page's events: no shared trace, no shared bre
 session (crash-free rate) is counted per SDK. If that matters to you, you want a hybrid SDK such as
 [sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this plugin.
 
-## Verifying on a device
+Native stack traces need the debug symbols uploaded (`sentry-cli debug-files upload`), which this
+plugin does not do.
 
-`crash()` kills the process; the native SDK sends the report on the **next launch**, so relaunch the
-app and wait a few seconds before looking in Sentry. Native stack traces need the debug symbols
-uploaded (`sentry-cli debug-files upload`), which this plugin does not do.
+# Development
+
+```sh
+npm install
+npm test                      # the JavaScript on Node: the API, the parity of the two platforms and the README, the device tests
+npm run test:ios              # the Swift against cordova-ios and sentry-cocoa, XCTest on a simulator (test/ios)
+npm run test:android          # the Kotlin against cordova-android and sentry-android, JVM with Robolectric (test/android)
+npm run test:paramedic:ios:simulator      # tests/ in an app on a simulator (cordova-paramedic)
+npm run test:paramedic:android:emulator   # the same on an emulator (ANDROID_AVD=<name>)
+```
+
+| Path | What |
+| --- | --- |
+| `src/ios/SentryNative.swift`, `Package.swift` | the iOS plugin, a Swift package: cordova-ios 8 links it, SPM brings sentry-cocoa |
+| `src/android/SentryNative.kt` | the Android plugin |
+| `src/www/sentryNative.ts` | the TypeScript wrapper (promises); compiled into `www/` (committed) with `npm run build` |
+| `types/index.d.ts` | the `window.SentryNative` global |
+| `tests/` | the test plugin for cordova-paramedic (`defineAutoTests`, and the crash as a manual test) |
+| `test/unit/` | `node --test`, no device: the JavaScript, the parity test, and `tests/` run against a fake native |
+| `test/ios/`, `test/android/` | the native code compiled and tested for real, without an app |
+| `test/coverage/` | the coverage floors each layer holds |
+| `demo/` | a Cordova app with one button per call, for a phone |
+
+A release is a version bump in `package.json`, `plugin.xml` and `tests/`, merged to `main`: CI runs the
+tests and publishes the new version to npm through trusted publishing (no stored token).
 
 ## Licence
 

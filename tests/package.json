@@ -1,0 +1,11 @@
+{
+  "name": "cordova-plugin-sentry-sdk-tests",
+  "version": "0.1.0",
+  "description": "Tests of cordova-plugin-sentry-sdk for cordova-plugin-test-framework (run by cordova-paramedic)",
+  "license": "Apache-2.0",
+  "private": true,
+  "cordova": {
+    "id": "cordova-plugin-sentry-sdk-tests",
+    "platforms": ["android", "ios"]
+  }
+}

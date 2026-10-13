@@ -1,0 +1,6 @@
+platforms
+plugins
+node_modules
+package-lock.json
+.plugin
+build.local.json

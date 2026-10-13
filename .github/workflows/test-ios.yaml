@@ -1,0 +1,50 @@
+name: iOS tests
+# The Swift and the device tests on an iOS simulator: no phone, and no system prompt to answer. The two jobs are independent and run
+# side by side. Called by ci.yaml when something they cover changes, and for every push to main.
+on:
+  workflow_call:
+jobs:
+  # The Swift of src/ios against cordova-ios and sentry-cocoa, with XCTest.
+  xctest:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run test:ios:coverage
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: coverage-ios
+          path: coverage/ios.json
+          if-no-files-found: ignore
+      # A cancelled run leaves xcodebuild and the simulator running, which slows the runner's own clean-up for minutes.
+      - name: Stop what the tests left running
+        if: always()
+        run: |
+          pkill -f '[x]codebuild' || true
+          xcrun simctl shutdown all || true
+  # tests/ (the device tests) in an app on the simulator, with the plugin installed the way an app installs it.
+  paramedic:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      # cordova-paramedic checks the requirements of a device build first, and refuses to start without ios-deploy
+      # even though a simulator run does not use it.
+      - run: brew install ios-deploy
+      - run: npm run test:paramedic:ios:simulator
+      - name: Stop what the tests left running
+        if: always()
+        run: |
+          pkill -f '[c]ordova-paramedic' || true
+          pkill -f '[x]codebuild' || true
+          xcrun simctl shutdown all || true

@@ -1,0 +1,13 @@
+= 0.1.2 =
+iOS: appHangTimeoutInterval is read as a number, so an integer value is applied too
+plugin.xml enables Kotlin for Android and sets the iOS deployment target to 15.0, so an app that never set them builds and runs the plugin
+Tests for the JavaScript (Node), the Swift (XCTest on a simulator, against cordova-ios and sentry-cocoa) and the Kotlin (Robolectric,
+against cordova-android and sentry-android), cordova-paramedic tests, a demo app, coverage floors, and a CI that publishes only
+when they pass, through npm trusted publishing (workflow ci.yaml)
+
+= 0.1.1 =
+Published through npm trusted publishing (GitHub Actions, no stored token); boolean tags reach Sentry as true/false on iOS
+
+= 0.1.0 =
+First release: start sentry-cocoa (Swift package, prebuilt xcframework from SPM) and sentry-android through their public API,
+setUser, setTags, setContext and a crash for device tests; TypeScript wrapper with promises

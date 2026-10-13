@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The plugin's tests for cordova-plugin-test-framework: cordova-paramedic installs this beside the plugin and runs `defineAutoTests`
+     on a phone, a simulator or an emulator; `defineManualTests` is the crash, which only a person should raise. Not published:
+     package.json `files` leaves tests/ out. -->
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" id="cordova-plugin-sentry-sdk-tests" version="0.1.0">
+    <name>Sentry SDK Tests</name>
+    <license>Apache-2.0</license>
+    <js-module src="tests.js" name="tests" />
+</plugin>

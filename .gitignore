@@ -1,1 +1,17 @@
+*.DS_Store
+.idea
+npm-debug.log
 node_modules
+demo/build.local.json
+demo/.plugin
+demo/platforms
+demo/plugins
+demo/package-lock.json
+test/ios/.build
+test/ios/.swiftpm
+test/ios/Package.resolved
+test/android/.gradle
+test/android/build
+test/android/plugin/build
+test/android/local.properties
+/coverage/
