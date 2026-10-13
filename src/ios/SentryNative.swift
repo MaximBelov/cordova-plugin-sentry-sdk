@@ -61,7 +61,7 @@ import Sentry
                 if value is NSNull {
                     scope.removeTag(key: key)
                 } else {
-                    scope.setTag(value: String(describing: value), key: key)
+                    scope.setTag(value: SentryNative.tagText(value), key: key)
                 }
             }
         }
@@ -89,6 +89,14 @@ import Sentry
     @objc(crash:)
     func crash(_ command: CDVInvokedUrlCommand) {
         SentrySDK.crash()
+    }
+
+    /// A JSON boolean arrives as an NSNumber and would print as 0 or 1; Sentry filters on `true`/`false`.
+    private static func tagText(_ value: Any) -> String {
+        if let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return number.boolValue ? "true" : "false"
+        }
+        return String(describing: value)
     }
 
     private func reply(_ command: CDVInvokedUrlCommand, ok: Bool, _ message: String) {
