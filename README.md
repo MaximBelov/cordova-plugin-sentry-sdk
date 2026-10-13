@@ -21,12 +21,14 @@ replaced the browser SDK's default integrations with its own. A plugin that call
 
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
-| iOS | sentry-cocoa 9.30.1 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8, iOS 15 |
-| Android | sentry-android 8.52.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 12, Kotlin enabled |
+| iOS | sentry-cocoa 9.30.1 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8, iOS 15, Xcode 26 |
+| Android | sentry-android 8.60.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 12, Kotlin enabled |
 
 The plugin enables Kotlin in the Android build and sets the iOS deployment target to 15.0 through its own `plugin.xml`
 (an app that declares a higher target inside its `<platform name="ios">` block keeps it). The CocoaPods trunk stopped
-at sentry-cocoa 9.19.1, which is why iOS is a Swift package.
+at sentry-cocoa 9.19.1, which is why iOS is a Swift package. Xcode 26 is needed because SwiftPM 6.1 (Xcode 16.4) refuses
+sentry-cocoa 9.x pinned by version: the manifest it reads depends on KSCrash by revision, which SwiftPM 6.2 leaves out as
+unused and 6.1 does not.
 
 ## Installing
 
@@ -34,7 +36,7 @@ at sentry-cocoa 9.19.1, which is why iOS is a Swift package.
 cordova plugin add cordova-plugin-sentry-sdk
 ```
 
-Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.52.0`). The iOS version is pinned in `Package.swift`.
+Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.60.0`). The iOS version is pinned in `Package.swift`.
 
 ## Use
 

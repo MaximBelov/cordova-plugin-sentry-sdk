@@ -95,12 +95,16 @@ class SentryNative : CordovaPlugin() {
     }
 
     private fun toMap(json: JSONObject): Map<String, Any?> =
-        json.keys().asSequence().associateWith { key ->
-            when (val value = json.opt(key)) {
-                is JSONObject -> toMap(value)
-                is JSONArray -> (0 until value.length()).map { value.opt(it) }
-                JSONObject.NULL -> null
-                else -> value
-            }
+        json.keys().asSequence().associateWith { key -> fromJson(json.opt(key)) }
+
+    private fun toList(json: JSONArray): List<Any?> = (0 until json.length()).map { fromJson(json.opt(it)) }
+
+    // Sentry serialises what it is given; a JSONObject or JSONArray left inside a map reaches it as an opaque object.
+    private fun fromJson(value: Any?): Any? =
+        when (value) {
+            is JSONObject -> toMap(value)
+            is JSONArray -> toList(value)
+            JSONObject.NULL, null -> null
+            else -> value
         }
 }

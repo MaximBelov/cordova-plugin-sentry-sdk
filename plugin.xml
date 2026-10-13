@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" id="cordova-plugin-sentry-sdk" version="0.1.2">
+<plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-sentry-sdk" version="0.1.2">
   <name>SentryNative</name>
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
-  <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.52.0" />
+  <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />
 
   <engines>
     <engine name="cordova-ios" version=">=8.0.0" />

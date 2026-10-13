@@ -145,6 +145,20 @@ class SentryNativeTest {
     }
 
     @Test
+    fun `setContext converts arrays all the way down, so nothing JSON-typed reaches the scope`() {
+        run("start", json("dsn" to DSN))
+        val herds = JSONArray().put(json("id" to 1, "tags" to JSONArray().put("a").put(JSONObject.NULL))).put(JSONObject.NULL)
+        assertEquals("set", run("setContext", "farm", json("herds" to herds)).strMessage)
+        var farm: Any? = null
+        Sentry.configureScope { farm = it.contexts["farm"] }
+        val list = (farm as Map<*, *>)["herds"] as List<*>
+        val first = list[0] as Map<*, *>
+        assertEquals(1, first["id"])
+        assertEquals(listOf("a", null), first["tags"])
+        assertNull(list[1])
+    }
+
+    @Test
     fun `setContext without a key is refused`() {
         val result = run("setContext", "", json("x" to 1))
         assertEquals(PluginResult.Status.ERROR.ordinal, result.status)
