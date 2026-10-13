@@ -26,7 +26,8 @@
     "types",
     "plugin.xml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "Package.swift"
   ],
   "types": "types/index.d.ts",
   "scripts": {
