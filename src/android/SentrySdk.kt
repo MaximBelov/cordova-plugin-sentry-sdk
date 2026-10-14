@@ -1,4 +1,4 @@
-package io.github.maximbelov.sentry
+package io.github.maximbelov.sentrysdk
 
 import io.sentry.Sentry
 import io.sentry.android.core.SentryAndroid
@@ -14,7 +14,7 @@ import org.json.JSONObject
  * envelope bridge -- the JS SDK sends its own events, this only owns what the page cannot see: a native
  * crash, an ANR, an application exit.
  */
-class SentryNative : CordovaPlugin() {
+class SentrySdk : CordovaPlugin() {
 
     private var started = false
 
@@ -91,7 +91,7 @@ class SentryNative : CordovaPlugin() {
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
     private fun crash() {
-        cordova.activity.runOnUiThread { throw RuntimeException("SentryNative: test crash") }
+        cordova.activity.runOnUiThread { throw RuntimeException("SentrySdk: test crash") }
     }
 
     private fun toMap(json: JSONObject): Map<String, Any?> =

@@ -1,8 +1,8 @@
-import type * as SentryNative from '../www/sentryNative';
+import type * as SentrySdk from '../www/SentrySdk';
 
 declare global {
   interface Window {
-    SentryNative?: typeof SentryNative;
+    SentrySdk?: typeof SentrySdk;
   }
 }
 

@@ -4,10 +4,10 @@
 set -euo pipefail
 derived=.build/derived-data
 rm -rf "$derived"
-xcodebuild test -scheme SentryNative -destination "platform=iOS Simulator,name=$(node simulator.mjs)" \
+xcodebuild test -scheme SentrySdk -destination "platform=iOS Simulator,name=$(node simulator.mjs)" \
   -enableCodeCoverage YES -derivedDataPath "$derived"
 profile=$(ls -t "$derived"/Build/ProfileData/*/Coverage.profdata | head -1)
-binary="$derived/Build/Products/Debug-iphonesimulator/SentryNativeTests.xctest/SentryNativeTests"
+binary="$derived/Build/Products/Debug-iphonesimulator/SentrySdkTests.xctest/SentrySdkTests"
 mkdir -p ../../coverage
 # only the plugin's sources: not the tests, not cordova-ios, not sentry-cocoa
 xcrun llvm-cov export -summary-only -instr-profile="$profile" "$binary" \

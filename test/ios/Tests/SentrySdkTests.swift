@@ -1,7 +1,7 @@
 import Cordova
 import Sentry
 import XCTest
-@testable import SentryNative
+@testable import SentrySdk
 
 /// Records what the plugin sends to JavaScript. Everything else of the protocol is unused by these tests.
 final class RecordingCommandDelegate: NSObject, CDVCommandDelegate {
@@ -17,16 +17,16 @@ final class RecordingCommandDelegate: NSObject, CDVCommandDelegate {
 
 /// What the plugin answers JavaScript, and what it puts on the native scope, with sentry-cocoa started for real against a DSN whose
 /// host answers nothing. No app: the plugin is driven the way Cordova drives it, one CDVInvokedUrlCommand per call.
-final class SentryNativeTests: XCTestCase {
+final class SentrySdkTests: XCTestCase {
     /// A DSN whose host answers nothing: the SDK starts, and no project receives a test session.
     static let dsn = "https://0123456789abcdef0123456789abcdef@127.0.0.1:9/1"
 
-    private var plugin: SentryNative!
+    private var plugin: SentrySdk!
     private var delegate: RecordingCommandDelegate!
 
     override func setUp() {
         super.setUp()
-        plugin = SentryNative()
+        plugin = SentrySdk()
         delegate = RecordingCommandDelegate()
         plugin.commandDelegate = delegate
     }
@@ -42,7 +42,7 @@ final class SentryNativeTests: XCTestCase {
     @discardableResult
     private func run(_ method: String, _ args: [Any]) -> CDVPluginResult {
         calls += 1
-        let command = CDVInvokedUrlCommand(arguments: args, callbackId: "cb\(calls)", className: "SentryNative", methodName: method)!
+        let command = CDVInvokedUrlCommand(arguments: args, callbackId: "cb\(calls)", className: "SentrySdk", methodName: method)!
         let before = delegate.results.count
         switch method {
         case "start": plugin.start(command)
@@ -86,7 +86,7 @@ final class SentryNativeTests: XCTestCase {
 
     func testTheOptionsThePagePassesReachTheSdkOptions() {
         let options = Options()
-        SentryNative.configure(options, from: [
+        SentrySdk.configure(options, from: [
             "dsn": Self.dsn, "release": "tests@0.1.0", "environment": "test", "dist": "7", "appHangTimeoutInterval": 7,
         ])
         XCTAssertEqual(options.dsn, Self.dsn)
@@ -100,7 +100,7 @@ final class SentryNativeTests: XCTestCase {
         XCTAssertEqual(options.enableAutoSessionTracking, true)
 
         let explicit = Options()
-        SentryNative.configure(explicit, from: [
+        SentrySdk.configure(explicit, from: [
             "dsn": Self.dsn, "enableCaptureFailedRequests": true, "enableAppHangTracking": false, "enableAutoSessionTracking": false,
         ])
         XCTAssertEqual(explicit.enableCaptureFailedRequests, true)

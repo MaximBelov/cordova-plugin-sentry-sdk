@@ -46,18 +46,18 @@
       });
     }
     document.addEventListener('deviceready', function () {
-      document.getElementById('state').textContent = 'ready: ' + cordova.platformId + ', SentryNative ' + (window.SentryNative ? 'present' : 'MISSING');
+      document.getElementById('state').textContent = 'ready: ' + cordova.platformId + ', SentrySdk ' + (window.SentrySdk ? 'present' : 'MISSING');
       var dsnEl = document.getElementById('dsn');
       try { dsnEl.value = localStorage.getItem('dsn') || ''; } catch (e) {}
       run('start', function () {
         try { localStorage.setItem('dsn', dsnEl.value); } catch (e) {}
-        return SentryNative.start({ dsn: dsnEl.value, release: 'sentry-demo@1.0.0', environment: 'demo', appHangTimeoutInterval: 7 });
+        return SentrySdk.start({ dsn: dsnEl.value, release: 'sentry-demo@1.0.0', environment: 'demo', appHangTimeoutInterval: 7 });
       });
-      run('setUser', function () { return SentryNative.setUser({ id: '42', email: 'demo@example.com', username: 'demo' }); });
-      run('clearUser', function () { return SentryNative.setUser(null); });
-      run('setTags', function () { return SentryNative.setTags({ 'account.region': 'IE', premium: true, gone: null }); });
-      run('setContext', function () { return SentryNative.setContext('account', { animals: 120, premium: true }); });
-      run('crash', function () { return SentryNative.crash(); });
+      run('setUser', function () { return SentrySdk.setUser({ id: '42', email: 'demo@example.com', username: 'demo' }); });
+      run('clearUser', function () { return SentrySdk.setUser(null); });
+      run('setTags', function () { return SentrySdk.setTags({ 'account.region': 'IE', premium: true, gone: null }); });
+      run('setContext', function () { return SentrySdk.setContext('account', { animals: 120, premium: true }); });
+      run('crash', function () { return SentrySdk.crash(); });
       document.getElementById('clear').addEventListener('click', function () { logEl.textContent = ''; window.results = []; });
     });
   </script>

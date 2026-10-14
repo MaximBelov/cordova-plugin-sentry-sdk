@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://cordova.apache.org/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-sentry-sdk" version="0.1.2">
-  <name>SentryNative</name>
+  <name>SentrySdk</name>
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
   <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />
@@ -10,14 +10,14 @@
     <engine name="cordova-android" version=">=12.0.0" />
   </engines>
 
-  <js-module src="www/sentryNative.js" name="SentryNative">
-    <clobbers target="window.SentryNative" />
+  <js-module src="www/SentrySdk.js" name="SentrySdk">
+    <clobbers target="window.SentrySdk" />
   </js-module>
 
   <platform name="android">
     <config-file target="res/xml/config.xml" parent="/*">
-      <feature name="SentryNative">
-        <param name="android-package" value="io.github.maximbelov.sentry.SentryNative" />
+      <feature name="SentrySdk">
+        <param name="android-package" value="io.github.maximbelov.sentrysdk.SentrySdk" />
       </feature>
       <!-- The plugin is Kotlin. cordova-android reads these from the platform's merged config.xml at prepare (lib/prepare.js,
            updateUserProjectGradlePropertiesConfig), so an app that never set them still compiles the plugin; an app that did
@@ -35,15 +35,15 @@
     <framework src="io.sentry:sentry-android:$SENTRY_ANDROID_SDK_VERSION" />
     <!-- The "new app directory structure" form: for a .kt file cordova-android copies to app/src/main/<target-dir>
          verbatim, and only a .java file is rewritten from src/ into java/. kotlin-android compiles src/main/kotlin. -->
-    <source-file src="src/android/SentryNative.kt" target-dir="app/src/main/kotlin/io.github.maximbelov.sentry" />
+    <source-file src="src/android/SentrySdk.kt" target-dir="app/src/main/kotlin/io/github/maximbelov/sentrysdk" />
   </platform>
 
   <!-- A Swift package (cordova-ios 8): Package.swift at the root takes sentry-cocoa from SPM, which
        serves every release as a prebuilt xcframework. The CocoaPods trunk stopped at 9.19.1. -->
   <platform name="ios" package="swift">
     <config-file target="config.xml" parent="/*">
-      <feature name="SentryNative">
-        <param name="ios-package" value="SentryNative" />
+      <feature name="SentrySdk">
+        <param name="ios-package" value="SentrySdk" />
       </feature>
       <!-- sentry-cocoa 9 needs iOS 15, and cordova-ios 8 creates an app for iOS 13: without this the build fails with
            "requires minimum platform version 15.0 ... but this target supports 13.0". A preference the app declares INSIDE

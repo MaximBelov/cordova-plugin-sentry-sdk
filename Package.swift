@@ -9,7 +9,7 @@ let package = Package(
     name: "cordova-plugin-sentry-sdk",
     platforms: [.iOS(.v15)],
     products: [
-        .library(name: "cordova-plugin-sentry-sdk", targets: ["SentryNative"])
+        .library(name: "cordova-plugin-sentry-sdk", targets: ["SentrySdk"])
     ],
     dependencies: [
         .package(url: "https://github.com/apache/cordova-ios.git", branch: "master"),
@@ -17,7 +17,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SentryNative",
+            name: "SentrySdk",
             dependencies: [
                 .product(name: "Cordova", package: "cordova-ios"),
                 .product(name: "Sentry", package: "sentry-cocoa"),

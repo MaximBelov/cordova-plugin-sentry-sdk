@@ -8,7 +8,7 @@
 var DSN = 'https://0123456789abcdef0123456789abcdef@127.0.0.1:9/1';
 
 exports.defineAutoTests = function () {
-  var api = window.SentryNative;
+  var api = window.SentrySdk;
 
   function failWith(done) {
     return function (error) {
@@ -17,7 +17,7 @@ exports.defineAutoTests = function () {
     };
   }
 
-  describe('SentryNative (window.SentryNative)', function () {
+  describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
       ['start', 'setUser', 'setTags', 'setContext', 'crash'].forEach(function (name) {
@@ -92,6 +92,6 @@ exports.defineManualTests = function (contentEl, createActionButton) {
     '<p>Crash: the process goes down, and the native SDK sends the report on the NEXT launch. Start the SDK with a real DSN first ' +
     '(the automatic tests start it with one that reaches nothing), relaunch the app after the crash, and look in Sentry.</p>';
   createActionButton('Crash the process natively', function () {
-    window.SentryNative.crash();
+    window.SentrySdk.crash();
   });
 };

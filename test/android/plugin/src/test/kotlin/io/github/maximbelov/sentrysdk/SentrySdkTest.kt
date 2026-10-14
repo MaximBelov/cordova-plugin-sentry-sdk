@@ -1,4 +1,4 @@
-package io.github.maximbelov.sentry
+package io.github.maximbelov.sentrysdk
 
 import androidx.appcompat.app.AppCompatActivity
 import io.sentry.Sentry
@@ -31,9 +31,9 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
-class SentryNativeTest {
+class SentrySdkTest {
     private lateinit var webView: CordovaWebView
-    private lateinit var plugin: SentryNative
+    private lateinit var plugin: SentrySdk
     private var calls = 0
 
     @Before
@@ -43,9 +43,9 @@ class SentryNativeTest {
         controller.get().setTheme(androidx.appcompat.R.style.Theme_AppCompat)
         val activity = controller.setup().get()
         webView = mock(CordovaWebView::class.java)
-        plugin = SentryNative()
+        plugin = SentrySdk()
         // the way Cordova hands a plugin its interface and web view
-        plugin.privateInitialize("SentryNative", CordovaInterfaceImpl(activity), webView, CordovaPreferences())
+        plugin.privateInitialize("SentrySdk", CordovaInterfaceImpl(activity), webView, CordovaPreferences())
     }
 
     @After
