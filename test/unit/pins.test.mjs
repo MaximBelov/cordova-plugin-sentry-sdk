@@ -3,8 +3,9 @@
 // files of this repository, so a format that drifts away from what the script looks for fails here and not on a Monday), which pull
 // request is opened or left alone, and the commands that open one.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -54,7 +55,7 @@ test('a pin behind the latest release says so, with the title and the branch of 
   assert.equal(behind.major, false);
   assert.equal(behind.line, 'sentry-cocoa: pinned 9.30.1, latest 9.30.2 (behind)');
   assert.equal(behind.title, 'Take sentry-cocoa 9.30.2');
-  assert.equal(behind.branch, 'pins/sentry-cocoa-9.30.2');
+  assert.equal(behind.branch, 'pin-sentry-cocoa-9.30.2');
 
   assert.equal(assess(cocoa, '9.30.2', '10.0.0').major, true);
   assert.equal(assess(cocoa, '9.30.2', '9.31.0').major, false);
@@ -145,21 +146,21 @@ test('a pull request is opened for a pin that is behind, unless that version has
   assert.equal(byTitle.open, false, 'a pull request of the same title, from any branch');
   assert.match(byTitle.why, /#14 is already there \(open\)/);
 
-  const declined = decide(behind, [pull(15, 'Something else', 'CLOSED', 'pins/sentry-android-8.61.0')]);
+  const declined = decide(behind, [pull(15, 'Something else', 'CLOSED', 'pin-sentry-android-8.61.0')]);
   assert.equal(declined.open, false, 'one that was closed is a version that was declined');
   assert.match(declined.why, /#15 .*closed/);
 
-  assert.equal(decide(behind, [pull(16, 'Take sentry-cocoa 8.61.0', 'OPEN', 'pins/sentry-cocoa-8.61.0')]).open, true, 'another SDK is another pull request');
+  assert.equal(decide(behind, [pull(16, 'Take sentry-cocoa 8.61.0', 'OPEN', 'pin-sentry-cocoa-8.61.0')]).open, true, 'another SDK is another pull request');
 });
 
 test('an open pull request of this script for an older release of the same SDK is replaced, and nothing else is', () => {
   const result = assess(android, '8.60.0', '8.62.0');
-  const older = pull(1, 'Take sentry-android 8.61.0', 'OPEN', 'pins/sentry-android-8.61.0');
+  const older = pull(1, 'Take sentry-android 8.61.0', 'OPEN', 'pin-sentry-android-8.61.0');
   const others = [
-    pull(2, 'Take sentry-android 8.59.0', 'CLOSED', 'pins/sentry-android-8.59.0'),
-    pull(3, 'Take sentry-cocoa 9.31.0', 'OPEN', 'pins/sentry-cocoa-9.31.0'),
+    pull(2, 'Take sentry-android 8.59.0', 'CLOSED', 'pin-sentry-android-8.59.0'),
+    pull(3, 'Take sentry-cocoa 9.31.0', 'OPEN', 'pin-sentry-cocoa-9.31.0'),
     pull(4, 'Take sentry-android 8.61.0', 'OPEN', 'android-8-61-0'),
-    pull(5, 'Take sentry-android 8.62.0', 'OPEN', 'pins/sentry-android-8.62.0'),
+    pull(5, 'Take sentry-android 8.62.0', 'OPEN', 'pin-sentry-android-8.62.0'),
   ];
   assert.deepEqual(superseded(result, [older, ...others]), [older]);
 });
@@ -214,15 +215,15 @@ test('propose opens one pull request per SDK that is behind, from the commit it 
     'gh workflow run',
     'git switch --detach',
   ]);
-  assert.deepEqual(calls[0], ['git', 'switch', '--create', 'pins/sentry-cocoa-99.0.0']);
+  assert.deepEqual(calls[0], ['git', 'switch', '--create', 'pin-sentry-cocoa-99.0.0']);
   assert.deepEqual(calls[1], ['git', 'add', '--', 'Package.swift', 'test/ios/Package.swift', 'README.md', 'CHANGES.txt']);
   assert.equal(calls[2].at(-3), 'Take sentry-cocoa 99.0.0');
-  assert.deepEqual(calls[3], ['git', 'push', '--set-upstream', 'origin', 'pins/sentry-cocoa-99.0.0']);
-  assert.deepEqual(calls[4].slice(0, 9), ['gh', 'pr', 'create', '--base', 'main', '--head', 'pins/sentry-cocoa-99.0.0', '--title', 'Take sentry-cocoa 99.0.0']);
+  assert.deepEqual(calls[3], ['git', 'push', '--set-upstream', 'origin', 'pin-sentry-cocoa-99.0.0']);
+  assert.deepEqual(calls[4].slice(0, 9), ['gh', 'pr', 'create', '--base', 'main', '--head', 'pin-sentry-cocoa-99.0.0', '--title', 'Take sentry-cocoa 99.0.0']);
   assert.match(calls[4].at(-1), /This is a major release/);
-  assert.deepEqual(calls[5], ['gh', 'workflow', 'run', 'ci.yaml', '--ref', 'pins/sentry-cocoa-99.0.0']);
+  assert.deepEqual(calls[5], ['gh', 'workflow', 'run', 'ci.yaml', '--ref', 'pin-sentry-cocoa-99.0.0']);
   assert.deepEqual(calls[6], ['git', 'switch', '--detach', 'abc123']);
-  assert.deepEqual(calls[7], ['git', 'switch', '--create', 'pins/sentry-android-8.99.0']);
+  assert.deepEqual(calls[7], ['git', 'switch', '--create', 'pin-sentry-android-8.99.0']);
   assert.match(calls[11].at(-1), /sentry-android 8\.99\.0 is out/);
   assert.doesNotMatch(calls[11].at(-1), /major release/, 'a minor release is not called a major');
 });
@@ -241,10 +242,56 @@ test('propose leaves a pin that is not behind, and one that has a pull request, 
   const behind = { sdk: android, result: assess(android, readPin(android), '99.1.0') };
   assert.deepEqual(run([behind], proposed).calls, []);
 
-  const older = pull(9, 'Take sentry-android 99.0.0', 'OPEN', 'pins/sentry-android-99.0.0');
+  const older = pull(9, 'Take sentry-android 99.0.0', 'OPEN', 'pin-sentry-android-99.0.0');
   const { calls } = run([behind], [older]);
   assert.deepEqual(calls.at(-2), ['gh', 'pr', 'close', '9', '--delete-branch', '--comment', 'Replaced by #21.']);
   assert.deepEqual(calls.at(-1), ['git', 'switch', '--detach', 'abc123']);
+});
+
+test('the git commands work against a real remote: a branch of its own, a commit from the bot, the starting commit back, and a branch called pins is no obstacle', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pins-'));
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', ...args], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  try {
+    const remote = join(dir, 'remote.git');
+    const clone = join(dir, 'clone');
+    git(dir, 'init', '--bare', '--quiet', '--initial-branch=main', remote);
+    git(dir, 'clone', '--quiet', remote, clone);
+    const files = ['Package.swift', 'test/ios/Package.swift', 'plugin.xml', 'test/android/plugin/build.gradle', 'README.md', 'CHANGES.txt'];
+    for (const file of files) {
+      mkdirSync(dirname(join(clone, file)), { recursive: true });
+      writeFileSync(join(clone, file), real(file));
+    }
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '--message', 'start');
+    git(clone, 'branch', '--move', 'main');
+    git(clone, 'push', '--quiet', 'origin', 'main');
+    // the branch of an earlier pull request, which this repository has: git refuses every branch beneath a name that exists
+    git(clone, 'push', '--quiet', 'origin', 'main:pins');
+    const head = git(clone, 'rev-parse', 'HEAD');
+
+    const elsewhere = [];
+    const act = (command, args) => {
+      if (command === 'git') {
+        return execFileSync('git', args, { cwd: clone, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      }
+      elsewhere.push([command, ...args]);
+      return '';
+    };
+    const inClone = { read: (file) => readFileSync(join(clone, file), 'utf8'), write: (file, text) => writeFileSync(join(clone, file), text) };
+    propose([{ sdk: android, result: assess(android, readPin(android), '8.99.0') }], { exec: () => '[]', act, files: inClone, head });
+
+    const branch = 'refs/heads/pin-sentry-android-8.99.0';
+    assert.equal(git(remote, 'rev-parse', `${branch}~1`), head, 'one commit on top of where it started');
+    assert.equal(git(remote, 'log', '-1', '--format=%an <%ae>', branch), 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>');
+    assert.equal(git(remote, 'log', '-1', '--format=%s', branch), 'Take sentry-android 8.99.0');
+    assert.deepEqual(git(remote, 'diff', '--name-only', head, branch).split('\n'), ['CHANGES.txt', 'README.md', 'plugin.xml', 'test/android/plugin/build.gradle']);
+    assert.equal(git(clone, 'rev-parse', 'HEAD'), head, 'back where it started');
+    assert.equal(git(clone, 'status', '--porcelain'), '', 'and nothing left behind');
+    assert.deepEqual(elsewhere.map((call) => call.slice(0, 3).join(' ')), ['gh pr create', 'gh workflow run']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the script refuses a flag it does not know before it asks anyone anything, so a workflow that still says --issue fails', () => {
