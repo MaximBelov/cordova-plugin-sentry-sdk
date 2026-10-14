@@ -5,7 +5,7 @@
 // version is the one the root Package.swift pins; test/unit/platform-parity.test.mjs keeps the two equal.
 import PackageDescription
 
-let sentryCocoaVersion: Version = "9.30.1"
+let sentryCocoaVersion: Version = "9.30.2"
 
 let package = Package(
     name: "SentrySdk",
