@@ -58,11 +58,28 @@ function pickSimulator() {
   return iPhone.udid;
 }
 
-/** The app is up when launchd lists its UIKit job with a process id; a job that is gone, or listed with "-", is not running. */
-const alive = (udid) =>
-  simctl('spawn', udid, 'launchctl', 'list')
-    .stdout.split('\n')
-    .some((line) => line.includes(`UIKitApplication:${APP_ID}`) && /^\d+\s/.test(line.trim()));
+/**
+ * Launches the app and returns its process id. An app on a simulator is a process of this machine, so a signal of 0 says whether it is
+ * alive, with nothing to ask the simulator (`launchctl list` inside it answered nothing on a CI runner, which read as an app that never
+ * started).
+ */
+function launchApp(udid) {
+  const output = simctlOk('launch', udid, APP_ID);
+  const pid = Number(/:\s*(\d+)\s*$/m.exec(output)?.[1]);
+  if (!pid) {
+    throw new Error(`simctl launch did not say a process id: ${output.trim()}`);
+  }
+  return pid;
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+};
 
 function build() {
   writeE2eConfig({ demo, host: '127.0.0.1', port, release });
@@ -99,14 +116,13 @@ async function runOnSimulator() {
     simctl('uninstall', udid, APP_ID);
     simctlOk('install', udid, app);
 
-    simctlOk('launch', udid, APP_ID);
-    await waitFor('the app to start', () => alive(udid), 30_000);
-    console.log('first launch: the app is up, it sets its scope and crashes');
-    await waitFor('the app to crash', () => !alive(udid), 90_000);
+    const pid = launchApp(udid);
+    console.log(`first launch: the app is up (process ${pid}), it sets its scope and crashes`);
+    await waitFor('the app to crash', () => !alive(pid), 90_000);
     console.log('the app went down');
 
     // sentry-cocoa writes the crash report when it happens and sends it at the next start of the SDK, which the second launch makes.
-    simctlOk('launch', udid, APP_ID);
+    launchApp(udid);
     await waitFor('the crash to arrive', () => eventArrived(ingest.received), 90_000);
     console.log(`arrived: ${ingest.received.length} envelope(s)`);
 
