@@ -1,4 +1,5 @@
 = next =
+iOS: sentry-cocoa 9.30.2 (it was 9.30.1). Its fixes are mostly in what runs inside a crashing or busy app: crash report buffer overflows, a deadlock in the crash handler, and two EXC_BAD_ACCESS crashes of the SDK itself, in the network tracker and in reading the cellular network technology
 start refuses a dsn the SDK cannot parse, on iOS too: sentry-cocoa starts without a dsn and sends nothing, and the plugin used to answer started and then answer already started to every corrected attempt
 a user, tags or a context set before start are kept, answered queued, and applied by start (the last change of each key), instead of being answered set and lost
 whether the SDK is running is the SDK's to say, not a flag of the plugin instance: a plugin instance made again after an Activity is recreated, or an SDK the app started itself, answers already started and works on the running SDK
