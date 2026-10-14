@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="io.github.maximbelov.sentry.demo" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+<widget id="io.github.maximbelov.sentry.demo" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android">
     <name>SentryDemo</name>
     <description>Demo of cordova-plugin-sentry-sdk: one button per call, the answer of each shown on screen</description>
     <content src="index.html" />
@@ -16,5 +16,10 @@
         <preference name="GradlePluginKotlinEnabled" value="true" />
         <preference name="GradlePluginKotlinVersion" value="2.1.0" />
         <preference name="AndroidXEnabled" value="true" />
+        <!-- test/e2e points the DSN at an ingest endpoint on this machine, which speaks plain http. One attribute: a multi-attribute
+             edit-config here is re-applied one attribute per prepare, and the others are lost. -->
+        <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+            <application android:usesCleartextTraffic="true" />
+        </edit-config>
     </platform>
 </widget>
