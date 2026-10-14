@@ -179,14 +179,17 @@ final class SentrySdkTests: XCTestCase {
         XCTAssertEqual(options.enableCaptureFailedRequests, false)
         XCTAssertEqual(options.enableAppHangTracking, true)
         XCTAssertEqual(options.enableAutoSessionTracking, true)
+        XCTAssertEqual(options.enableMetricKit, Options().enableMetricKit, "unset keeps the SDK's default")
 
         let explicit = Options()
         SentrySdk.configure(explicit, from: [
             "dsn": Self.dsn, "enableCaptureFailedRequests": true, "enableAppHangTracking": false, "enableAutoSessionTracking": false,
+            "enableMetricKit": true,
         ])
         XCTAssertEqual(explicit.enableCaptureFailedRequests, true)
         XCTAssertEqual(explicit.enableAppHangTracking, false)
         XCTAssertEqual(explicit.enableAutoSessionTracking, false)
+        XCTAssertEqual(explicit.enableMetricKit, true)
         XCTAssertEqual(explicit.appHangTimeoutInterval, Options().appHangTimeoutInterval, "unset keeps the SDK's default")
     }
 

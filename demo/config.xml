@@ -1,5 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <widget id="io.github.maximbelov.sentry.demo" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- No Kotlin and no deployment-target preference here, on purpose: the demo is the bare app the plugin has to work in. The plugin
+         asks for what it needs (Kotlin on Android, iOS 15) through its own plugin.xml, and test/e2e proves that it does. -->
     <name>SentryDemo</name>
     <description>Demo of cordova-plugin-sentry-sdk: one button per call, the answer of each shown on screen</description>
     <content src="index.html" />
@@ -8,8 +10,6 @@
     <!-- the SDK talks to Sentry's ingest hosts -->
     <access origin="*" />
     <platform name="ios">
-        <preference name="deployment-target" value="15.0" />
-        <preference name="SwiftVersion" value="5.9" />
         <preference name="Orientation" value="portrait" />
         <!-- test/e2e points the DSN at an ingest endpoint on this machine, which speaks plain http. -->
         <edit-config file="*-Info.plist" mode="merge" target="NSAppTransportSecurity">
@@ -20,9 +20,6 @@
         </edit-config>
     </platform>
     <platform name="android">
-        <preference name="GradlePluginKotlinEnabled" value="true" />
-        <preference name="GradlePluginKotlinVersion" value="2.1.0" />
-        <preference name="AndroidXEnabled" value="true" />
         <!-- test/e2e points the DSN at an ingest endpoint on this machine, which speaks plain http. One attribute: a multi-attribute
              edit-config here is re-applied one attribute per prepare, and the others are lost. -->
         <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">

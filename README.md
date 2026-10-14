@@ -3,32 +3,57 @@
 Starts the native Sentry SDKs ([sentry-cocoa](https://github.com/getsentry/sentry-cocoa),
 [sentry-android](https://github.com/getsentry/sentry-java)) in a Cordova app through their **public
 API only**, and keeps the user, tags and contexts your JavaScript SDK sets in sync with them. That
-is the whole plugin: a native crash, an app hang, a watchdog termination or an ANR reaches Sentry
-with the same user and tags as the page's own events.
+is the whole plugin: what goes wrong in native code (a crash, an app hang, a watchdog termination, an
+ANR) reaches Sentry with the user and tags the page set.
 
 It deliberately does **not** route the page's events through the native SDK. Use the Sentry
 JavaScript SDK of your framework (`@sentry/browser`, `@sentry/angular`, ...) for everything that
 happens in the web view, with its own transport, integrations and source maps; this plugin only owns
 what the page cannot see.
 
-Why not [sentry-cordova](https://github.com/getsentry/sentry-cordova)? Sentry archived it in 2026.
-Its bridge sends the JavaScript envelopes through the native SDK's cache, reaches into private
-hybrid-SDK headers that every major version of sentry-cocoa reshuffles, and its last release
-replaced the browser SDK's default integrations with its own. A plugin that calls only
-`SentrySDK.start`, `setUser` and `configureScope` has nothing to break on the next major.
+Why not [sentry-cordova](https://github.com/getsentry/sentry-cordova)? Sentry archived it in March 2026
+(its last release, 1.7.3, is from October 2025). Its iOS code pushes the page's envelopes through the
+native SDK with `PrivateSentrySDKOnly` and imports private headers (`SentryOptionsInternal.h`), and
+sentry-cocoa replaced `PrivateSentrySDKOnly` with `SentrySDK.internal` in 9.19.0, a minor release
+([changelog](https://github.com/getsentry/sentry-cocoa/blob/9.30.1/CHANGELOG.md)), and 9.30.1 no longer contains it. A
+plugin built that way moves with every such change. This one calls only the public API of the two SDKs
+(`SentrySDK.start`, `setUser`, `configureScope`; `SentryAndroid.init`, `Sentry.setUser`, `setTag`,
+`configureScope`), so a new major of an SDK changes what it calls, not what it reaches into.
 
 ## Supported platforms
 
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
-| iOS | sentry-cocoa 9.30.1 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8, iOS 15, Xcode 26 |
-| Android | sentry-android 8.60.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 12, Kotlin enabled |
+| iOS | sentry-cocoa 9.30.1 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
+| Android | sentry-android 8.60.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 15.1.0 |
 
-The plugin enables Kotlin in the Android build and sets the iOS deployment target to 15.0 through its own `plugin.xml`
-(an app that declares a higher target inside its `<platform name="ios">` block keeps it). The CocoaPods trunk stopped
-at sentry-cocoa 9.19.1, which is why iOS is a Swift package. Xcode 26 is needed because SwiftPM 6.1 (Xcode 16.4) refuses
-sentry-cocoa 9.x pinned by version: the manifest it reads depends on KSCrash by revision, which SwiftPM 6.2 leaves out as
-unused and 6.1 does not.
+What the minimums rest on:
+
+- **cordova-ios 8.0.1.** On 8.0.0 the build fails when the plugin is already in the project as the platform is added, which is
+  what `cordova prepare` does on a fresh clone: the app's deployment target becomes 15, the plugins' Swift package stays at iOS 13,
+  and SwiftPM refuses it with `The package product 'cordova-plugin-sentry-sdk' requires minimum platform version 15.0 for the iOS
+  platform, but this target supports 13.0`. Added after the platform, the plugin builds on 8.0.0. 8.0.1 builds in both orders and
+  passed the end-to-end test (built by hand; its release notes list the fixes, GH-1612 and GH-1616). CI builds with the newest 8.x.
+- **cordova-android 15.1.0.** The oldest release the tests build with: Gradle 8.14.2, Android Gradle plugin 8.10.1 and Kotlin
+  2.1.21, which are its own defaults, and the JVM tests are held to the same versions. Older releases ship older tools (14.0.1
+  defaults to Kotlin 1.9.24) and are not built here.
+- **iOS 15 and Xcode 26.** sentry-cocoa 9 needs iOS 15. Resolving sentry-cocoa 9.30.1 with Xcode 16.4 (SwiftPM 6.1) failed with
+  `'sentry-cocoa' is required using a stable-version but 'sentry-cocoa' depends on an unstable-version package 'kscrash'`
+  (GitHub Actions run 38413045350, whose log is no longer available), and Xcode 26 resolved it. Why they differ is not
+  established: the manifests sentry-cocoa ships for SwiftPM 6.1 and 6.2 declare that dependency the same way.
+- **A Swift package, not CocoaPods.** The newest `Sentry` pod on the CocoaPods trunk is 9.19.1, published on 2026-07-01
+  (checked on 2026-10-14 at `https://trunk.cocoapods.org/api/v1/pods/Sentry`), while sentry-cocoa is at 9.30.1.
+
+What the plugin asks of the app's build, and what the app keeps:
+
+- **Android** turns Kotlin on (`GradlePluginKotlinEnabled`) and leaves the version to cordova-android's default (2.1.21 in
+  15.1.0) or to the app's `GradlePluginKotlinVersion`. Without Kotlin the plugin is not compiled and the build stays green, and
+  then every call hangs.
+- **iOS** sets the deployment target to 15.0 for an app that declares none. An app that declares its own
+  `<preference name="deployment-target">` keeps it, at the root of its `config.xml` or inside `<platform name="ios">`: cordova
+  merges the app's `config.xml` over the plugins' changes, and the later preference wins. A value below 15 fails the build.
+- `Package.swift` depends on cordova-ios's `master` branch, as the cordova-ios plugin guide prescribes, and an app does not
+  fetch it: cordova-ios rewrites that dependency to the app's own `CordovaLib` when the plugin is installed.
 
 ## Installing
 
@@ -36,7 +61,15 @@ unused and 6.1 does not.
 cordova plugin add cordova-plugin-sentry-sdk
 ```
 
-Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.60.0`). The iOS version is pinned in `Package.swift`.
+Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.60.0`), set with
+`cordova plugin add cordova-plugin-sentry-sdk --variable SENTRY_ANDROID_SDK_VERSION=<version>`. The iOS version is pinned in
+`Package.swift`.
+
+Coming from sentry-cordova: remove it first (`cordova plugin rm sentry-cordova`). Two starts of the native SDK in one process end
+badly: sentry-cocoa warns that "calling start again without close() may lead to undefined behavior", and sentry-android
+overwrites the first start's configuration with the second's. What the old plugin did through its native bridge (sending the
+page's events through the native SDK, native breadcrumbs, native performance) is not provided here. Your page keeps using the
+browser SDK.
 
 ## Names
 
@@ -55,20 +88,23 @@ same ones:
 
 ```ts
 document.addEventListener('deviceready', async () => {
-  await window.SentrySdk.start({
+  await window.SentrySdk?.start({
     dsn: '<your dsn>',
     release: 'my-app@1.2.3',   // the same value the JavaScript SDK reports
     environment: 'production',
-    appHangTimeoutInterval: 7, // iOS: seconds of a blocked main thread before a hang is reported
   });
-  await window.SentrySdk.setUser({ id: '42', email: 'user@example.com' });
-  await window.SentrySdk.setTags({ 'account.region': 'IE', plan: 'pro' });
-  await window.SentrySdk.setContext('account', { animals: 120, premium: true });
+  await window.SentrySdk?.setUser({ id: '42', email: 'user@example.com' });
+  await window.SentrySdk?.setTags({ 'account.region': 'IE', plan: 'pro' });
+  await window.SentrySdk?.setContext('account', { animals: 120, premium: true });
 });
 ```
 
-Every call returns a promise. Native answers through Cordova's callbacks, and a refused call (no DSN,
-no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`window.SentrySdk`).
+Call `start` first, on **every launch** (see [Starting late](#starting-late)).
+
+`window.SentrySdk` exists only inside a Cordova app, so the types declare it optional: guard for it in a web build
+(`ionic serve`, a test run). Every call returns a promise. Native answers through Cordova's callbacks with a string the types
+spell out (`'started' | 'already started'`, `'set' | 'cleared' | 'queued'`, ...), and a refused call (no DSN, no key) rejects with
+the reason as a string. Types ship in `types/index.d.ts`.
 
 # API
 
@@ -80,7 +116,7 @@ no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`
 
 ## start
 
-`start(options): Promise<string>`
+`start(options): Promise<'started' | 'already started'>`
 
 `SentrySDK.start` / `SentryAndroid.init` with the options below. Answers `started`. If the SDK is
 already running, whoever started it, it answers `already started` and changes nothing: the SDK is
@@ -98,28 +134,29 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `dsn` | required | both |
 | `release`, `environment`, `dist` | unset | both |
 | `enableAutoSessionTracking` | `true` | both |
-| `enableAppHangTracking` | `true` | iOS |
-| `appHangTimeoutInterval` | the SDK's `2` | iOS |
-| `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`; in a web view it turns every failed HTTP request into an event) | iOS |
+| `enableAppHangTracking` | `true`. **Deprecated**: sentry-cocoa removes app hang tracking in v10 | iOS |
+| `appHangTimeoutInterval` | the SDK's `2`. **Deprecated** with the option above | iOS |
+| `enableMetricKit` | the SDK's own: `false` in sentry-cocoa 9, `true` in 10. MetricKit delivers the system's hang, CPU and disk-write diagnostics, and is where sentry-cocoa sends you instead of app hang tracking | iOS |
+| `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`). The SDK watches the requests the app's own code makes, another plugin's HTTP calls for one; a request the page makes is made by WebKit's own processes and is not among them. Network breadcrumbs (`enableNetworkBreadcrumbs`) stay on, as the SDK has them | iOS |
 | `enableAnrTracking` | `true` | Android |
 
 ## setUser
 
-`setUser(user | null): Promise<string>`
+`setUser(user | null): Promise<'set' | 'cleared' | 'queued'>`
 
 Sets the user on the native scope (`id`, `email`, `username`), or clears it with `null`. Answers
 `set` or `cleared`, or `queued`: see below.
 
 ## setTags
 
-`setTags({ key: value | null }): Promise<string>`
+`setTags({ key: value | null }): Promise<'set' | 'queued'>`
 
 Sets tags on the native scope; a `null` value removes that tag. A boolean reaches Sentry as `true`
 or `false`, a number as its text. Answers `set`, or `queued`: see below.
 
 ## setContext
 
-`setContext(key, object | null): Promise<string>`
+`setContext(key, object | null): Promise<'set' | 'queued'>`
 
 Sets a named context (an object) on the native scope, or removes it with `null`. Answers `set`, or
 `queued`: see below.
@@ -137,24 +174,92 @@ SDK is up. Nothing is kept for an SDK that never starts.
 `crash(): Promise<never>`
 
 Crashes the process natively: `SentrySDK.crash()` on iOS, an uncaught exception on the main thread
-on Android. For a device test only; the promise never resolves, the app is gone. The native SDK
-sends the report on the **next launch**, so relaunch and start the SDK again before looking in Sentry.
+on Android. For a device test only; the promise never settles, the app is gone. Relaunch and start
+the SDK again before looking in Sentry: sentry-cocoa sends the report at the next start of the SDK,
+and sentry-android flushes what it can to disk at the crash and sends what is left at the next start.
 
 ## What arrives, and what does not
 
 Native events carry the native SDK's own device and OS contexts plus whatever you set through this
-plugin. They are separate from the page's events: no shared trace, no shared breadcrumbs, and the
-session (crash-free rate) is counted per SDK. If that matters to you, you want a hybrid SDK such as
+plugin. They are separate from the page's events: no shared trace, no shared breadcrumbs. If that
+matters to you, you want a hybrid SDK such as
 [sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this plugin.
 
-Native stack traces need the debug symbols uploaded (`sentry-cli debug-files upload`), which this
-plugin does not do.
+What reaches Sentry through this plugin is what the two SDKs catch in native code: a crash, and on
+iOS a watchdog termination, an app hang (the deprecated option) and, with `enableMetricKit`, the
+system's own diagnostics; on Android an ANR, which the SDK reads from the system's exit records at
+the next start (Android 11 and newer).
+
+### Starting late
+
+The native SDK starts when the page calls `start`, which is after the web view has loaded and
+`deviceready` has fired: in an Ionic or Angular app, seconds after the process began. So:
+
+- A crash, an ANR or a hang before `start` has run is not caught by that launch's SDK. What the
+  previous launch left behind is sent when the SDK next starts, which is why `start` belongs in
+  every launch.
+- An app that crashes before the page runs, in a plugin's `pluginInitialize`, after a bad update,
+  out of memory during the first paint, never starts the SDK and is never reported, for as long as
+  that lasts.
+- Starting from native code earlier (`Application.onCreate`, `didFinishLaunching`) with the DSN in
+  the manifest or `config.xml` would close that window, at the price of the page no longer choosing
+  the release and environment. This plugin does not do it.
+
+### Crashes of the web view itself
+
+The common "the app went white and restarted" in a Cordova app is not a native crash, and this
+plugin does not report it. It hooks neither callback (read from the cordova-android and cordova-ios
+sources, not measured on a device):
+
+- Android: when the web view's renderer process dies, cordova-android's `SystemWebViewClient.onRenderProcessGone`
+  asks the plugins and, when none handles it, returns `WebViewClient`'s default, which tells Android that the
+  host did not handle it.
+- iOS: when WebKit's content process terminates, `CDVWebViewEngine` reloads the page
+  (`CrashRecoveryBehavior`) and the app lives on.
+
+### Sessions
+
+Both SDKs count sessions: the native one per app run (`enableAutoSessionTracking`, on by default
+here) and the browser SDK its own (`browserSessionIntegration`). With the same `release` on both, one launch
+puts sessions from two SDKs under one release, and the crash-free figures are a blend of two views.
+Decide which SDK owns release health: pass `enableAutoSessionTracking: false` here, or turn session
+tracking off in the page's SDK. The plugin keeps the SDK's default.
+
+### Set the user and the tags early
+
+sentry-android writes the scope (user, tags, contexts, breadcrumbs) to disk as it changes
+(`enableScopePersistence`, on by default), and sentry-cocoa hands it to its crash handler and
+keeps it for watchdog terminations. So an event that is reported at the next start, a crash on iOS,
+an ANR or a watchdog termination, carries what was set during the run it happened in. Call `setUser`
+and `setTags` early in every run: what you set after the crash cannot be in it. A context is
+stored on the device with the rest of the scope, so put nothing in one that must not be on disk.
+
+### Privacy
+
+`setUser` sends what you pass, `id`, `email` and `username`, and nothing else about the user. The
+plugin does not touch `sendDefaultPii`: the SDKs' own default applies, which is `false` in both
+versions pinned here.
+
+### Symbols
+
+A native stack trace is readable in Sentry only when the build's debug symbols are there: upload
+the dSYMs of the iOS build with `sentry-cli debug-files upload`, and the mapping file of an Android
+build that is minified (R8 or ProGuard). This plugin uploads nothing.
+
+## Versions of the SDKs
+
+- sentry-cocoa is pinned exactly in `Package.swift`, and an app cannot override it: a fix in the SDK
+  reaches your app through a release of this plugin.
+- sentry-android is the plugin variable `SENTRY_ANDROID_SDK_VERSION`, 8.60.0 by default, and an app
+  can install the plugin with another.
+- `test/unit/platform-parity.test.mjs` holds the pins of `plugin.xml`, `Package.swift`, `test/ios`
+  and `test/android` together. No promise is made about a future major of either SDK.
 
 # Development
 
 ```sh
 npm install
-npm test                      # the JavaScript on Node: the API, the parity of the two platforms and the README, the device tests
+npm test                      # the JavaScript on Node: the API, the parity of the two platforms and the README, the types, the device tests
 npm run test:ios              # the Swift against cordova-ios and sentry-cocoa, XCTest on a simulator (test/ios)
 npm run test:android          # the Kotlin against cordova-android and sentry-android, JVM with Robolectric (test/android)
 npm run test:e2e:android:build && npm run test:e2e:android   # the demo app crashes itself on a device or an emulator and its report is read (test/e2e)
@@ -167,15 +272,21 @@ npm run test:paramedic:android:emulator   # the same on an emulator (ANDROID_AVD
 | --- | --- |
 | `src/ios/SentrySdk.swift`, `Package.swift` | the iOS plugin, a Swift package: cordova-ios 8 links it, SPM brings sentry-cocoa |
 | `src/android/SentrySdk.kt` | the Android plugin |
-| `src/www/SentrySdk.ts` | the TypeScript wrapper (promises); compiled into `www/` (committed) with `npm run build` |
+| `src/www/SentrySdk.ts` | the TypeScript wrapper (promises); compiled into `www/` (committed) with `npm run build`, and CI fails when they differ |
 | `types/index.d.ts` | the `window.SentrySdk` global |
 | `tests/` | the test plugin for cordova-paramedic (`defineAutoTests`, and the crash as a manual test) |
-| `test/unit/` | `node --test`, no device: the JavaScript, the parity test, and `tests/` run against a fake native |
+| `test/unit/` | `node --test`, no device: the JavaScript, the parity test, the types, and `tests/` run against a fake native |
+| `test/types/` | a sample consumer of the shipped types, compiled by `test/unit/types.test.mjs` |
 | `test/ios/`, `test/android/` | the native code compiled and tested for real, without an app |
+| `test/e2e/` | the demo app crashes itself and its report is read at an endpoint on the runner |
 | `test/coverage/` | the coverage floors each layer holds |
-| `demo/` | a Cordova app with one button per call, for a phone |
+| `demo/` | a Cordova app with one button per call, for a phone; a bare app, with no Kotlin or deployment-target setting of its own |
 
-A release is a version bump in `package.json`, `plugin.xml` and `tests/`, merged to `main`: CI runs the
+The `cordova-paramedic` dev dependency is an alias of `cordova-paramedic-hotfix`, which is built from a fork of
+apache/cordova-paramedic (`MaximBelov/cordova-paramedic`) that runs the tests on a physical iOS device and on a phone over USB.
+It is used for development only and is not part of the published plugin.
+
+A release is a version bump in `package.json`, `plugin.xml` and `tests/` (both of its manifests), merged to `main`: CI runs the
 tests and publishes the new version to npm through trusted publishing (no stored token).
 
 ## Licence

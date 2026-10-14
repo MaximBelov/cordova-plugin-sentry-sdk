@@ -6,8 +6,8 @@
   <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />
 
   <engines>
-    <engine name="cordova-ios" version=">=8.0.0" />
-    <engine name="cordova-android" version=">=12.0.0" />
+    <engine name="cordova-ios" version=">=8.0.1" />
+    <engine name="cordova-android" version=">=15.1.0" />
   </engines>
 
   <js-module src="www/SentrySdk.js" name="SentrySdk">
@@ -19,12 +19,17 @@
       <feature name="SentrySdk">
         <param name="android-package" value="io.github.maximbelov.sentrysdk.SentrySdk" />
       </feature>
-      <!-- The plugin is Kotlin. cordova-android reads these from the platform's merged config.xml at prepare (lib/prepare.js,
-           updateUserProjectGradlePropertiesConfig), so an app that never set them still compiles the plugin; an app that did
-           keeps its own version, because the app's config.xml wins over a plugin's. Without this the .kt is skipped in silence
-           and every call times out. -->
+      <!-- The plugin is Kotlin, and cordova-android applies the Kotlin Gradle plugin only when this is true (its default is false).
+           Without it the .kt is not compiled and the build stays green, and then every call hangs: PluginManager.getPlugin gets no
+           class from instantiatePlugin and calls privateInitialize on null, so a NullPointerException is thrown on the bridge thread,
+           outside the try/catch of exec, and the page's promise never settles (measured on cordova-android 15.1.0: the log shows
+           "Error adding plugin" and the NullPointerException, the page sees nothing).
+           cordova-android reads the preference from the platform's merged config.xml (lib/prepare.js, updateConfigFilesFrom): the
+           plugins' changes go in first and the app's config.xml is merged on top, and of two preferences of one name the later wins,
+           so one the app declares, at the root or inside its <platform name="android"> block, wins over this one (measured).
+           The Kotlin VERSION is deliberately not set here: a plugin that set one would give every app that declares none an older
+           Kotlin than cordova-android's own default (the 2.1.0 this plugin once injected, against 2.1.21 in 15.1.0). -->
       <preference name="GradlePluginKotlinEnabled" value="true" />
-      <preference name="GradlePluginKotlinVersion" value="2.1.0" />
     </config-file>
 
     <!-- The SDK is started from `start`, with the DSN the page passes, never from the manifest. -->
@@ -33,22 +38,30 @@
     </config-file>
 
     <framework src="io.sentry:sentry-android:$SENTRY_ANDROID_SDK_VERSION" />
-    <!-- The "new app directory structure" form: for a .kt file cordova-android copies to app/src/main/<target-dir>
-         verbatim, and only a .java file is rewritten from src/ into java/. kotlin-android compiles src/main/kotlin. -->
+    <!-- The "new app directory structure" form: a target-dir that starts with app/ is used as it is, so the file lands at
+         <target-dir>/SentrySdk.kt (lib/pluginHandlers.js, getInstallDestination). With the older src/... form a .java file is rewritten
+         into app/src/main/java and anything else is copied to app/src/main/<target-dir> as it stands, so a .kt would land in
+         app/src/main/src/... where nothing compiles it: a green build and calls that hang, as above.
+         kotlin-android compiles app/src/main/kotlin. -->
     <source-file src="src/android/SentrySdk.kt" target-dir="app/src/main/kotlin/io/github/maximbelov/sentrysdk" />
   </platform>
 
   <!-- A Swift package (cordova-ios 8): Package.swift at the root takes sentry-cocoa from SPM, which
-       serves every release as a prebuilt xcframework. The CocoaPods trunk stopped at 9.19.1. -->
+       serves every release as a prebuilt xcframework. The newest Sentry pod on the CocoaPods trunk is 9.19.1 (2026-07-01). -->
   <platform name="ios" package="swift">
     <config-file target="config.xml" parent="/*">
       <feature name="SentrySdk">
         <param name="ios-package" value="SentrySdk" />
       </feature>
       <!-- sentry-cocoa 9 needs iOS 15, and cordova-ios 8 creates an app for iOS 13: without this the build fails with
-           "requires minimum platform version 15.0 ... but this target supports 13.0". A preference the app declares INSIDE
-           its <platform name="ios"> block wins over this root-level one (cordova-common reads the platform's first), so an
-           app on a higher target keeps it. -->
+           "requires minimum platform version 15.0 ... but this target supports 13.0". cordova-ios applies the plugins' changes to the
+           platform's config.xml first and merges the app's config.xml over them (lib/prepare.js, updateConfigFile), and of two
+           preferences of one name the later wins, so an app that declares a deployment-target, at the root of its config.xml or inside
+           its <platform name="ios"> block, keeps it (measured on cordova-ios 8.1.1: an app's 16.0 reached IPHONEOS_DEPLOYMENT_TARGET).
+           Why the engine floor is 8.0.1: on 8.0.0 the preference reaches the app target but not the plugins' Swift package when the
+           plugin is already in the project as the platform is added, which is what `cordova prepare` does on a fresh clone, and the
+           build fails with "The package product 'cordova-plugin-sentry-sdk' requires minimum platform version 15.0 for the iOS
+           platform, but this target supports 13.0" (GH-1612 and GH-1616 in the release notes of 8.0.1). -->
       <preference name="deployment-target" value="15.0" />
     </config-file>
   </platform>

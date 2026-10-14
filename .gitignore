@@ -11,6 +11,7 @@ test/ios/.build
 test/ios/.swiftpm
 test/ios/Package.resolved
 test/android/.gradle
+test/android/.kotlin
 test/android/build
 test/android/plugin/build
 test/android/local.properties
