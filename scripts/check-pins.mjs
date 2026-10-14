@@ -143,28 +143,31 @@ export function bump(sdk, from, to, { read, write }) {
     write('README.md', moved);
     written.push('README.md');
   }
-  edit(
-    'CHANGES.txt',
-    (text) => text.replace(/^= next =\n/, (heading) => `${heading}${sdk.platform}: ${sdk.name} ${to} (it was ${from})\n`),
-    'it has no "= next =" section',
-  );
+  // A release renames "= next =", so after one there is no such section until a change makes it: this makes it.
+  const entry = `${sdk.platform}: ${sdk.name} ${to} (it was ${from})`;
+  edit('CHANGES.txt', (text) => (text.startsWith('= next =\n') ? text.replace('= next =\n', `= next =\n${entry}\n`) : `= next =\n${entry}\n\n${text}`), 'it was not changed');
   return written;
 }
 
-/** The commit message and the pull request description for a bump that wrote these files. */
-export function describePullRequest(sdk, result, files) {
-  const release = `https://github.com/${sdk.repo}/releases/tag/${result.latest}`;
-  return {
-    commit: `Release notes: ${release}`,
-    body: [
-      `${sdk.name} ${result.latest} is out, and this plugin pinned ${result.pinned}: ${release}`,
-      `This moves the pin, what a test holds equal to it, and the README lines that name the SDK and its old version, and adds a line to CHANGES.txt (${files.join(', ')}). What the release changes for this plugin is for whoever merges this to read in its notes and to add to that line; read the README lines it changed too, in case one is a statement about the old version.`,
-      ...(result.major
-        ? ['This is a major release, so it can change the API this plugin calls: a red check below is the first thing to expect. The branch is an ordinary one, and the fix goes on it.']
-        : []),
-      "CI was started on the branch by the workflow, through the workflow_dispatch of ci.yaml (a pull request opened with the repository's token starts no pull_request run). That run tests everything and never publishes.",
-    ].join('\n\n'),
-  };
+const releaseNotes = (sdk, result) => `https://github.com/${sdk.repo}/releases/tag/${result.latest}`;
+
+/** The second line of the commit message: where to read what changed. */
+export function commitMessage(sdk, result) {
+  return `Release notes: ${releaseNotes(sdk, result)}`;
+}
+
+/** The description of a pull request for a bump that wrote these files; `run` is the link to the CI run that was started on its branch. */
+export function describePullRequest(sdk, result, files, run) {
+  return [
+    `${sdk.name} ${result.latest} is out, and this plugin pinned ${result.pinned}: ${releaseNotes(sdk, result)}`,
+    `This moves the pin, what a test holds equal to it, and the README lines that name the SDK and its old version, and adds a line to CHANGES.txt (${files.join(', ')}). What the release changes for this plugin is for whoever merges this to read in its notes and to add to that line; read the README lines it changed too, in case one is a statement about the old version.`,
+    ...(result.major
+      ? ['This is a major release, so it can change the API this plugin calls: a red check is the first thing to expect. The branch is an ordinary one, and the fix goes on it.']
+      : []),
+    run
+      ? `CI was started on the branch by the workflow, as a workflow_dispatch of ci.yaml that tests everything and never publishes: ${run}. GitHub holds the pull_request run of a pull request that a workflow opened until someone approves it, so the list of checks on this page may not show CI: that run is the CI of this branch.`
+      : 'CI was started on the branch by the workflow, as a workflow_dispatch of ci.yaml that tests everything and never publishes: look for it under Actions, on this branch.',
+  ].join('\n\n');
 }
 
 /** Whether a pull request is to be opened for an SDK, and if not, why not. A pull request of any state counts: closing one declines the version. */
@@ -198,12 +201,14 @@ export function propose(entries, { exec, act, files, head }) {
     }
     act('git', ['switch', '--create', result.branch]);
     const written = bump(sdk, result.pinned, result.latest, files);
-    const text = describePullRequest(sdk, result, written);
     act('git', ['add', '--', ...written]);
-    act('git', [...BOT, 'commit', '--message', result.title, '--message', text.commit]);
+    act('git', [...BOT, 'commit', '--message', result.title, '--message', commitMessage(sdk, result)]);
     act('git', ['push', '--set-upstream', 'origin', result.branch]);
-    const created = act('gh', ['pr', 'create', '--base', BASE, '--head', result.branch, '--title', result.title, '--body', text.body]);
-    act('gh', ['workflow', 'run', 'ci.yaml', '--ref', result.branch]);
+    // CI before the pull request, so that its description can link to the run
+    const started = act('gh', ['workflow', 'run', 'ci.yaml', '--ref', result.branch]);
+    const run = /https:\/\/github\.com\/\S+\/actions\/runs\/\d+/.exec(started)?.[0];
+    const body = describePullRequest(sdk, result, written, run);
+    const created = act('gh', ['pr', 'create', '--base', BASE, '--head', result.branch, '--title', result.title, '--body', body]);
     const number = /\/pull\/(\d+)/.exec(created)?.[1];
     for (const old of superseded(result, pulls)) {
       act('gh', ['pr', 'close', String(old.number), '--delete-branch', '--comment', `Replaced by ${number ? `#${number}` : result.title}.`]);

@@ -7,8 +7,10 @@ name: SDK pins
 # Two things have to hold for it to work:
 #   - Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests" is on. Without it GitHub refuses the pull
 #     request, and the run fails at `gh pr create` with the branch already pushed.
-#   - CI is started by the script itself, as a workflow_dispatch of ci.yaml on the branch, because a pull request opened with the
-#     repository's token starts no pull_request run. That run is attached to the branch's commit, so the pull request shows its checks.
+#   - CI is started by the script itself, as a workflow_dispatch of ci.yaml on the branch, because the pull_request run of a pull request
+#     that a workflow opened is held until someone approves it. The dispatched run is associated with the pull request (`pull_requests`
+#     of the run) and the description links it, but the list of checks on the pull request showed only the held run's, which has none
+#     (#18, the first one this opened).
 on:
   schedule:
     - cron: '23 6 * * 1'
