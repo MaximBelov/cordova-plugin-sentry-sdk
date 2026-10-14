@@ -2,7 +2,9 @@ name: CI
 # One workflow for what a change goes through, parameterised by what triggered it (see `plan`):
 #
 #   a pull request  runs the tests its change needs, and ends in `ci`, the one job a ruleset on main can require;
-#   a push to main  does the same for everything, then publishes the version in package.json to npm as `latest`.
+#   a push to main  does the same for everything, then publishes the version in package.json to npm as `latest`;
+#   a run by hand   (workflow_dispatch) tests everything and never publishes. It is how a pull request that a workflow opened gets its
+#                   checks: one opened with the repository's token starts no pull_request run, so pins.yaml starts this on its branch.
 #
 # npm's trusted publishing is tied to this file name: the package's Settings > Trusted Publisher on npmjs.com names this
 # repository and this file (ci.yaml), with no environment. There is no npm token to expire. A push that keeps the version
@@ -12,6 +14,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 permissions:
   contents: read
 # A newer push to a pull request cancels the run before it. A push to main never cancels another: it may be the one that publishes.
@@ -33,7 +36,8 @@ jobs:
   # Everything that depends on what triggered the run is decided here, once:
   #   ios, android  which of the longer tests are needed: all of them for a push, and for a pull request the ones whose code,
   #                 tests or shared files (the JavaScript, the manifest, the coverage floors, the workflow) it changes
-  #   publish       whether the run ends in a publish: a push to main
+  #   publish       whether the run ends in a publish: a push to main, and nothing else. Trusted publishing is tied to this file's name and
+  #                 not to a branch, so a run by hand on any branch would publish the version it carries if this said yes
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -60,7 +64,10 @@ jobs:
           else
             ios=true
             android=true
-            publish=true
+            publish=false
+            if [ "$EVENT" = "push" ]; then
+              publish=true
+            fi
           fi
           {
             echo "ios=$ios"
