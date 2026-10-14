@@ -15,6 +15,6 @@ exports.setTags = setTags;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 const setContext = (key, value) => call('setContext', key, value);
 exports.setContext = setContext;
-/** Crashes the process natively. For a device probe, never for the app: the promise never resolves. */
+/** Crashes the process natively. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;

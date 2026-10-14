@@ -3,11 +3,11 @@ name: iOS tests
 # The jobs are independent and run side by side. Called by ci.yaml when something they cover changes, and for every push to main.
 on:
   workflow_call:
-# macos-26, not macos-15: the default Xcode on macos-15 is 16.4 (Swift 6.1), and SwiftPM 6.1 refuses sentry-cocoa 9.x pinned by
-# version, because the manifest it reads for that toolchain (Package@swift-6.1.swift) depends on KSCrash by revision, a dependency
-# it never uses: "'sentry-cocoa' is required using a stable-version but 'sentry-cocoa' depends on an unstable-version package
-# 'kscrash'" (run 38413045350). SwiftPM 6.2 (Xcode 26) leaves the unused dependency out and resolves. Xcode 26 is what an app
-# needs too, and the README says so.
+# macos-26, not macos-15: the default Xcode on macos-15 is 16.4 (SwiftPM 6.1), and resolving sentry-cocoa 9.30.1 pinned by version
+# failed there with "'sentry-cocoa' is required using a stable-version but 'sentry-cocoa' depends on an unstable-version package
+# 'kscrash'" (run 38413045350, whose log is no longer available). Xcode 26 (SwiftPM 6.2) resolved it. Why they differ is not
+# established: the manifests sentry-cocoa ships for SwiftPM 6.1 and 6.2 declare the KSCrash dependency the same way, by revision and
+# used only with the V10 trait. Xcode 26 is what an app needs too, and the README says so.
 jobs:
   # The Swift of src/ios against cordova-ios and sentry-cocoa, with XCTest.
   xctest:

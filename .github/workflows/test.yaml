@@ -13,6 +13,18 @@ jobs:
           # the coverage reporter needs a current Node
           node-version: 24
       - run: npm ci
+      # www/ and types are committed and shipped, and the unit tests read them: a change to src/www that was not built would be tested
+      # against the old build and found only when `publish` fails on main. This catches it in the pull request, files added by the
+      # build included.
+      - name: The committed build is the build of the source
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain -- www types)" ]; then
+            git status --short -- www types
+            git diff -- www types
+            echo "www/ is not the build of src/www: run npm run build and commit the result"
+            exit 1
+          fi
       - run: npm run test:unit:coverage
       - name: Keep the coverage report
         if: always()

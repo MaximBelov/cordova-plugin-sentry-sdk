@@ -46,11 +46,33 @@ test('plugin.xml, package.json and the Swift package agree on the plugin id and 
   assert.ok(pkg.files.includes('Package.swift'), 'Package.swift ships, or the iOS side cannot be installed');
 });
 
-test('test/android compiles with the Kotlin the plugin asks an app for', () => {
-  const asked = /GradlePluginKotlinVersion" value="([\d.]+)"/.exec(read('plugin.xml'))?.[1];
-  const tested = /org\.jetbrains\.kotlin\.android' version '([\d.]+)'/.exec(read('test/android/build.gradle'))?.[1];
-  assert.ok(asked, 'plugin.xml names a Kotlin version');
-  assert.equal(tested, asked, 'Kotlin: test/android against plugin.xml');
+test('plugin.xml turns Kotlin on for an app and leaves its version to the app and to cordova-android', () => {
+  const xml = read('plugin.xml');
+  assert.match(xml, /<preference name="GradlePluginKotlinEnabled" value="true"/, 'the Kotlin plugin is applied, or the .kt is never compiled');
+  // A version set here would give an app that declares none an older Kotlin than cordova-android's own default.
+  assert.doesNotMatch(xml, /<preference name="GradlePluginKotlinVersion"/, 'no Kotlin version is injected');
+});
+
+test('the engine floors are not above the versions CI builds with', () => {
+  const xml = read('plugin.xml');
+  const pkg = JSON.parse(read('package.json'));
+  const compare = (a, b) => {
+    const [x, y] = [a, b].map((version) => version.split('.').map(Number));
+    return x.reduce((order, part, index) => order || part - (y[index] ?? 0), 0);
+  };
+  for (const platform of ['cordova-android', 'cordova-ios']) {
+    const floor = new RegExp(`<engine name="${platform}" version=">=([\\d.]+)"`).exec(xml)?.[1];
+    const tested = /\^([\d.]+)/.exec(pkg.devDependencies[platform])?.[1];
+    assert.ok(floor, `plugin.xml has an engine floor for ${platform}`);
+    assert.ok(tested, `package.json has a dev dependency on ${platform}`);
+    assert.ok(compare(floor, tested) <= 0, `${platform}: the floor ${floor} is above ${tested}, the version the tests build with`);
+  }
+});
+
+test('tests/ is released with the plugin: the same version in its package.json and its plugin.xml', () => {
+  const version = JSON.parse(read('package.json')).version;
+  assert.equal(JSON.parse(read('tests/package.json')).version, version, 'tests/package.json');
+  assert.match(read('tests/plugin.xml'), new RegExp(`<plugin[^>]*\\sversion="${version.replaceAll('.', '\\.')}"`), 'tests/plugin.xml');
 });
 
 test('the test projects pin the SDK versions the plugin installs', () => {

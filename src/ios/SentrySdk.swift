@@ -59,12 +59,16 @@ import Sentry
         if let release = options["release"] as? String { sentryOptions.releaseName = release }
         if let environment = options["environment"] as? String { sentryOptions.environment = environment }
         if let dist = options["dist"] as? String { sentryOptions.dist = dist }
+        // Both app hang options are deprecated in sentry-cocoa 9 and gone in 10, which points at MetricKit instead.
         sentryOptions.enableAppHangTracking = (options["enableAppHangTracking"] as? Bool) ?? true
         // NSNumber, not Double: a JSON 7 arrives as an integer NSNumber, which `as? Double` refuses.
         if let interval = options["appHangTimeoutInterval"] as? NSNumber { sentryOptions.appHangTimeoutInterval = interval.doubleValue }
-        // The SDK's default is true, and in a web view it turns every failed HTTP request into an event,
-        // which buries the crashes; the page's own SDK already reports what it wants to.
+        // The SDK's default is true. It watches the URLSession tasks of the app's own process, so what it would turn into events are
+        // the failed requests that native code makes (another plugin's HTTP calls); the requests the page makes go through WebKit's own
+        // processes and are not seen at all. Off here: the page's own SDK reports what it wants to.
         sentryOptions.enableCaptureFailedRequests = (options["enableCaptureFailedRequests"] as? Bool) ?? false
+        // Only when the page asks, so the SDK's own default stays otherwise (false in sentry-cocoa 9, true in 10).
+        if let metricKit = options["enableMetricKit"] as? Bool { sentryOptions.enableMetricKit = metricKit }
         sentryOptions.enableAutoSessionTracking = (options["enableAutoSessionTracking"] as? Bool) ?? true
     }
 
