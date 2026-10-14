@@ -55,6 +55,13 @@ updates:
       android-tests:
         patterns: ['*']
         update-types: [minor, patch]
+    # The build tools and cordova's framework move with cordova-android, by hand: the tests build the plugin the way
+    # an app on that release does, so a newer Gradle or Android Gradle plugin is another build, not a better one.
+    ignore:
+      - dependency-name: gradle-wrapper
+      - dependency-name: com.android.library
+      - dependency-name: org.jetbrains.kotlin.android
+      - dependency-name: org.apache.cordova:framework
     labels: [dependencies]
 
   # sentry-cocoa, pinned in the plugin's own Package.swift and in the iOS tests'

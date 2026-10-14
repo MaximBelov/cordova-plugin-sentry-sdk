@@ -46,6 +46,13 @@ test('plugin.xml, package.json and the Swift package agree on the plugin id and 
   assert.ok(pkg.files.includes('Package.swift'), 'Package.swift ships, or the iOS side cannot be installed');
 });
 
+test('test/android compiles with the Kotlin the plugin asks an app for', () => {
+  const asked = /GradlePluginKotlinVersion" value="([\d.]+)"/.exec(read('plugin.xml'))?.[1];
+  const tested = /org\.jetbrains\.kotlin\.android' version '([\d.]+)'/.exec(read('test/android/build.gradle'))?.[1];
+  assert.ok(asked, 'plugin.xml names a Kotlin version');
+  assert.equal(tested, asked, 'Kotlin: test/android against plugin.xml');
+});
+
 test('the test projects pin the SDK versions the plugin installs', () => {
   const cocoa = (path) => /sentryCocoaVersion: Version = "([\d.]+)"/.exec(read(path))?.[1];
   assert.equal(cocoa('test/ios/Package.swift'), cocoa('Package.swift'), 'sentry-cocoa: test/ios against the plugin');

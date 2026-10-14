@@ -1,6 +1,10 @@
 // The plugin's Kotlin (src/android of the repository) built against cordova-android's framework and sentry-android, and tested on the
 // JVM with Robolectric: no emulator, no network. `npm run test:android` runs it.
 plugins {
-    id 'com.android.library' version '9.4.1' apply false
-    id 'org.jetbrains.kotlin.android' version '2.4.20' apply false
+    // The build tools are the ones cordova-android's own release ships with (test/unit/toolchain.test.mjs reads them
+    // from node_modules), and the Kotlin plugin is the version plugin.xml asks an app for: the plugin is tested the way
+    // an app builds it. A newer Android Gradle plugin is not a better test, it is another build: AGP 9 refuses the Kotlin
+    // plugin outright.
+    id 'com.android.library' version '8.10.1' apply false
+    id 'org.jetbrains.kotlin.android' version '2.1.0' apply false
 }
