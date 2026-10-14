@@ -3,7 +3,7 @@ import PackageDescription
 
 // The newest sentry-cocoa release. SPM serves its prebuilt xcframework, so the app build does not
 // compile the SDK; the newest Sentry pod on the CocoaPods trunk is 9.19.1 (2026-07-01), so CocoaPods is not used here.
-let sentryCocoaVersion: Version = "9.30.1"
+let sentryCocoaVersion: Version = "9.30.2"
 
 let package = Package(
     name: "cordova-plugin-sentry-sdk",
