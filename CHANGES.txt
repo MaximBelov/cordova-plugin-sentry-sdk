@@ -1,4 +1,5 @@
 = next =
+CI: a weekly workflow compares the sentry-cocoa and sentry-android pins with their latest releases and opens an issue when one is behind. Dependabot could not: its Swift jobs failed, and it does not read plugin.xml. Its two Swift entries are gone
 start refuses a dsn the SDK cannot parse, on iOS too: sentry-cocoa starts without a dsn and sends nothing, and the plugin used to answer started and then answer already started to every corrected attempt
 a user, tags or a context set before start are kept, answered queued, and applied by start (the last change of each key), instead of being answered set and lost
 whether the SDK is running is the SDK's to say, not a flag of the plugin instance: a plugin instance made again after an Activity is recreated, or an SDK the app started itself, answers already started and works on the running SDK
