@@ -1,7 +1,7 @@
 # Weekly updates for everything this repository depends on. Dependabot reads this file from the default branch only.
 #
 # cordova-android and cordova-ios (npm) and org.apache.cordova:framework (Gradle, test/android) are released together and belong
-# together; so do the sentry-cocoa pin (Package.swift, test/ios/Package.swift) and io.sentry:sentry-android (plugin.xml,
+# together; so do the sentry-cocoa pin (Package.swift, test/ios/Package.swift) and io.sentry:sentry-android-core (plugin.xml,
 # test/android): when one of a pair moves, move the other in the same step (test/unit/platform-parity.test.mjs says when they differ).
 version: 2
 

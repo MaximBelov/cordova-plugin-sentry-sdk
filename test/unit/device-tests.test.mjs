@@ -26,23 +26,31 @@ test('tests/package.json names the same id, and tests/ is not published', () => 
   assert.ok(!pkg.files.includes('tests'), 'package.json "files" must leave tests/ out');
 });
 
-/** What native answers per action, as both platforms do; `started` flips after the first start, and a scope call before it is kept ("queued"). */
+/**
+ * What native answers per action, as both platforms do: `started` flips after the first start, a scope call before it is kept
+ * ("queued"), and a crash goes ahead only when the last accepted start allowed it.
+ */
 function fakeNative() {
   let started = false;
+  let crashAllowed = false;
   return (success, failure, service, action, args) => {
     assert.equal(service, 'SentrySdk');
     const answer = {
       start: () => {
         if (!args[0] || !args[0].dsn) return failure('start needs an options object with a dsn');
-        if (started) return success('already started');
+        if (started) {
+          crashAllowed = args[0].allowCrash === true;
+          return success('already started');
+        }
         if (!/^https?:\/\/\w+@[^/]+\/\d+$/.test(args[0].dsn)) return failure('start was refused: the dsn does not parse');
         started = true;
+        crashAllowed = args[0].allowCrash === true;
         success('started');
       },
       setUser: () => success(!started ? 'queued' : args[0] === null ? 'cleared' : 'set'),
       setTags: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'set' : 'queued') : failure('setTags needs an object')),
       setContext: () => (args[0] ? success(started ? 'set' : 'queued') : failure('setContext needs a key')),
-      crash: () => {},
+      crash: () => (crashAllowed ? undefined : failure('crash is refused: it is for a device test, and start has to be given allowCrash: true')),
     }[action];
     if (!answer) return failure(`unknown action ${action}`);
     setTimeout(answer, 0);

@@ -13,7 +13,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 const js = read('www/SentrySdk.js');
 /** JavaScript export name -> the native action it sends. */
 const actionOf = Object.fromEntries(
-  [...js.matchAll(/^const (\w+) = \([^)]*\) => call\('(\w+)'/gm)].map((match) => [match[1], match[2]]),
+  [...js.matchAll(/^const (\w+) = (?:async )?\([^)]*\) => call\('(\w+)'/gm)].map((match) => [match[1], match[2]]),
 );
 const methods = Object.keys(actionOf);
 
@@ -78,9 +78,12 @@ test('tests/ is released with the plugin: the same version in its package.json a
 test('the test projects pin the SDK versions the plugin installs', () => {
   const cocoa = (path) => /sentryCocoaVersion: Version = "([\d.]+)"/.exec(read(path))?.[1];
   assert.equal(cocoa('test/ios/Package.swift'), cocoa('Package.swift'), 'sentry-cocoa: test/ios against the plugin');
-  const android = /SENTRY_ANDROID_SDK_VERSION" default="([\d.]+)"/.exec(read('plugin.xml'))?.[1];
-  const gradle = /io\.sentry:sentry-android:([\d.]+)/.exec(read('test/android/plugin/build.gradle'))?.[1];
-  assert.equal(gradle, android, 'sentry-android: test/android against plugin.xml');
+  const xml = read('plugin.xml');
+  const android = /SENTRY_ANDROID_SDK_VERSION" default="([\d.]+)"/.exec(xml)?.[1];
+  const artifact = /SENTRY_ANDROID_ARTIFACT" default="([\w-]+)"/.exec(xml)?.[1];
+  assert.match(xml, /<framework src="io\.sentry:\$SENTRY_ANDROID_ARTIFACT:\$SENTRY_ANDROID_SDK_VERSION"/, 'plugin.xml takes the artifact and its version from the two variables');
+  const gradle = new RegExp(`io\\.sentry:${artifact}:([\\d.]+)`).exec(read('test/android/plugin/build.gradle'))?.[1];
+  assert.equal(gradle, android, `${artifact}: test/android against plugin.xml`);
   const pkg = JSON.parse(read('package.json'));
   const framework = /org\.apache\.cordova:framework:([\d.]+)/.exec(read('test/android/plugin/build.gradle'))?.[1];
   assert.equal(`^${framework}`, pkg.devDependencies['cordova-android'], 'cordova-android: test/android against the dev dependency');

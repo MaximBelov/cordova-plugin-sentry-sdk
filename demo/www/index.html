@@ -62,7 +62,7 @@
             .then(function () { return SentrySdk.setContext('account', { animals: 120, premium: true }); })
             .then(function (answer) { show('e2e setContext', 'ok', answer); if (answer !== 'queued') { throw new Error('setContext before start answered ' + answer); } });
       before
-        .then(function () { return SentrySdk.start({ dsn: cfg.dsn, release: cfg.release, environment: cfg.environment, appHangTimeoutInterval: 7 }); })
+        .then(function () { return SentrySdk.start({ dsn: cfg.dsn, release: cfg.release, environment: cfg.environment, appHangTimeoutInterval: 7, allowCrash: true }); })
         .then(function (result) { show('e2e start', 'ok', result); })
         .then(function () {
           if (crashedBefore) { return null; }
@@ -82,7 +82,7 @@
       try { dsnEl.value = localStorage.getItem('dsn') || ''; } catch (e) {}
       run('start', function () {
         try { localStorage.setItem('dsn', dsnEl.value); } catch (e) {}
-        return SentrySdk.start({ dsn: dsnEl.value, release: 'sentry-demo@1.0.0', environment: 'demo', appHangTimeoutInterval: 7 });
+        return SentrySdk.start({ dsn: dsnEl.value, release: 'sentry-demo@1.0.0', environment: 'demo', appHangTimeoutInterval: 7, allowCrash: true });
       });
       run('setUser', function () { return SentrySdk.setUser({ id: '42', email: 'demo@example.com', username: 'demo' }); });
       run('clearUser', function () { return SentrySdk.setUser(null); });

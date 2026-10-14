@@ -28,6 +28,11 @@ export interface SentrySdkStartOptions {
     enableAutoSessionTracking?: boolean;
     /** Default true (Android): an ANR is reported as an event. */
     enableAnrTracking?: boolean;
+    /**
+     * Default false: `crash()` is refused. It takes the process down, so it is for a device test, and the page has to say so here, which
+     * keeps a stray call from ending the app. The last accepted `start` decides.
+     */
+    allowCrash?: boolean;
 }
 export interface SentrySdkUser {
     id?: string;
@@ -50,5 +55,5 @@ export declare const setUser: (user: SentrySdkUser | null) => Promise<SentrySdkU
 export declare const setTags: (tags: Record<string, SentrySdkTagValue>) => Promise<SentrySdkScopeAnswer>;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export declare const setContext: (key: string, value: Record<string, unknown> | null) => Promise<SentrySdkScopeAnswer>;
-/** Crashes the process natively. For a device probe, never for the app: the promise never settles, the app is gone. */
+/** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export declare const crash: () => Promise<never>;

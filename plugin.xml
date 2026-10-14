@@ -4,6 +4,10 @@
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
   <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />
+  <!-- Which sentry-android artifact the app takes. sentry-android-core is the SDK: Java and Kotlin crashes, ANRs, and what this plugin
+       calls. sentry-android is the same plus the NDK module (crashes in native C and C++ code, from any library in the app) and Session
+       Replay, which the plugin never turns on. The NDK is a set of native libraries per ABI in every APK, so it is opt-in. -->
+  <preference name="SENTRY_ANDROID_ARTIFACT" default="sentry-android-core" />
 
   <engines>
     <engine name="cordova-ios" version=">=8.0.1" />
@@ -37,7 +41,7 @@
       <meta-data android:name="io.sentry.auto-init" android:value="false" />
     </config-file>
 
-    <framework src="io.sentry:sentry-android:$SENTRY_ANDROID_SDK_VERSION" />
+    <framework src="io.sentry:$SENTRY_ANDROID_ARTIFACT:$SENTRY_ANDROID_SDK_VERSION" />
     <!-- The "new app directory structure" form: a target-dir that starts with app/ is used as it is, so the file lands at
          <target-dir>/SentrySdk.kt (lib/pluginHandlers.js, getInstallDestination). With the older src/... form a .java file is rewritten
          into app/src/main/java and anything else is copied to app/src/main/<target-dir> as it stands, so a .kt would land in

@@ -21,13 +21,17 @@ class SentrySdk : CordovaPlugin() {
     // page set before the SDK was running: the last change of each key, applied by `start`.
     private val pending = LinkedHashMap<String, () -> Unit>()
 
+    // `crash` takes the process down, so it is refused unless the page said so in an accepted `start`: that it is a device test. It is the
+    // page's word and not a lock, so it keeps a stray call from ending the app, not a script that can call `start` itself.
+    private var crashAllowed = false
+
     override fun execute(action: String, args: JSONArray, callbackContext: CallbackContext): Boolean {
         when (action) {
             "start" -> start(args.optJSONObject(0), callbackContext)
             "setUser" -> setUser(args.optJSONObject(0), callbackContext)
             "setTags" -> setTags(args.optJSONObject(0), callbackContext)
             "setContext" -> setContext(args.optString(0), args.optJSONObject(1), callbackContext)
-            "crash" -> crash()
+            "crash" -> crash(callbackContext)
             else -> return false
         }
         return true
@@ -40,8 +44,10 @@ class SentrySdk : CordovaPlugin() {
             callbackContext.error("start needs an options object with a dsn")
             return
         }
+        val allowCrash = options.optBoolean("allowCrash", false)
         // Started by an earlier instance of this plugin, or by the app itself: either way it is running, and its options are its own.
         if (Sentry.isEnabled()) {
+            crashAllowed = allowCrash
             callbackContext.success("already started")
             return
         }
@@ -65,6 +71,7 @@ class SentrySdk : CordovaPlugin() {
         }
         pending.values.forEach { it() }
         pending.clear()
+        crashAllowed = allowCrash
         callbackContext.success("started")
     }
 
@@ -123,7 +130,11 @@ class SentrySdk : CordovaPlugin() {
     }
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
-    private fun crash() {
+    private fun crash(callbackContext: CallbackContext) {
+        if (!crashAllowed) {
+            callbackContext.error("crash is refused: it is for a device test, and start has to be given allowCrash: true")
+            return
+        }
         cordova.activity.runOnUiThread { throw RuntimeException("SentrySdk: test crash") }
     }
 
