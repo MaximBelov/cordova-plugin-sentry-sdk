@@ -55,9 +55,17 @@ exports.defineAutoTests = function () {
   });
 
   describe('the scope', function () {
+    // A scope call is applied while the SDK is running, and kept for `start` before that (it answers "queued"). Jasmine runs the specs
+    // in a random order, so each of these starts the SDK first; a start after another spec's answers "already started".
+    function running() {
+      return api.start({ dsn: DSN });
+    }
+
     it('takes a user, and clears it with null', function (done) {
-      api
-        .setUser({ id: '42', email: 'user@example.com', username: 'tester' })
+      running()
+        .then(function () {
+          return api.setUser({ id: '42', email: 'user@example.com', username: 'tester' });
+        })
         .then(function (set) {
           expect(set).toBe('set');
           return api.setUser(null);
@@ -69,8 +77,10 @@ exports.defineAutoTests = function () {
     });
 
     it('takes tags, with null removing one, and a context', function (done) {
-      api
-        .setTags({ 'account.region': 'IE', premium: true, gone: null })
+      running()
+        .then(function () {
+          return api.setTags({ 'account.region': 'IE', premium: true, gone: null });
+        })
         .then(function (set) {
           expect(set).toBe('set');
           return api.setContext('account', { animals: 120, premium: true });

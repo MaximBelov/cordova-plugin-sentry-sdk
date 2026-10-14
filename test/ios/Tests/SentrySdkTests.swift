@@ -41,18 +41,23 @@ final class SentrySdkTests: XCTestCase {
     /// Runs an action the way Cordova does and returns what the plugin sent back.
     @discardableResult
     private func run(_ method: String, _ args: [Any]) -> CDVPluginResult {
+        run(method, args, on: plugin, recordedBy: delegate)
+    }
+
+    @discardableResult
+    private func run(_ method: String, _ args: [Any], on target: SentrySdk, recordedBy recorder: RecordingCommandDelegate) -> CDVPluginResult {
         calls += 1
         let command = CDVInvokedUrlCommand(arguments: args, callbackId: "cb\(calls)", className: "SentrySdk", methodName: method)!
-        let before = delegate.results.count
+        let before = recorder.results.count
         switch method {
-        case "start": plugin.start(command)
-        case "setUser": plugin.setUser(command)
-        case "setTags": plugin.setTags(command)
-        case "setContext": plugin.setContext(command)
+        case "start": target.start(command)
+        case "setUser": target.setUser(command)
+        case "setTags": target.setTags(command)
+        case "setContext": target.setContext(command)
         default: XCTFail("no such method: \(method)")
         }
-        XCTAssertEqual(delegate.results.count, before + 1, "\(method) answers exactly once")
-        return delegate.results.last!
+        XCTAssertEqual(recorder.results.count, before + 1, "\(method) answers exactly once")
+        return recorder.results.last!
     }
 
     private func status(_ result: CDVPluginResult) -> CDVCommandStatus {
@@ -81,6 +86,82 @@ final class SentrySdkTests: XCTestCase {
         let second = run("start", [["dsn": "https://other@127.0.0.1:9/2", "release": "other"]])
         XCTAssertEqual(status(second), CDVCommandStatus_OK)
         XCTAssertEqual(second.message as? String, "already started")
+        XCTAssertTrue(SentrySDK.isEnabled)
+    }
+
+    func testStartWithADsnThatDoesNotParseIsRefusedAndTheSdkStaysOffSoAGoodOneCanFollow() {
+        // sentry-cocoa starts without a dsn, silently, when it cannot parse the one it is given: the plugin must not answer "started".
+        let refused = run("start", [["dsn": "not a dsn"]])
+        XCTAssertEqual(status(refused), CDVCommandStatus_ERROR)
+        XCTAssertTrue((refused.message as? String ?? "").contains("start was refused"))
+        XCTAssertFalse(SentrySDK.isEnabled)
+
+        XCTAssertEqual(run("start", [["dsn": Self.dsn]]).message as? String, "started")
+        XCTAssertTrue(SentrySDK.isEnabled)
+    }
+
+    func testScopeCallsBeforeStartAreKeptAndAnsweredQueuedAndStartAppliesTheLastChangeOfEachKey() {
+        XCTAssertEqual(run("setUser", [["id": "1"]]).message as? String, "queued")
+        XCTAssertEqual(run("setUser", [["id": "42", "email": "user@example.com"]]).message as? String, "queued")
+        XCTAssertEqual(run("setTags", [["region": "IE", "gone": "soon", "tier": 1]]).message as? String, "queued")
+        XCTAssertEqual(run("setTags", [["gone": NSNull(), "tier": 2]]).message as? String, "queued")
+        XCTAssertEqual(run("setContext", ["account", ["animals": 7]]).message as? String, "queued")
+        XCTAssertEqual(run("setContext", ["account", ["animals": 120]]).message as? String, "queued")
+        XCTAssertEqual(run("setContext", ["farm", ["region": "IE"]]).message as? String, "queued")
+        XCTAssertEqual(run("setContext", ["farm", NSNull()]).message as? String, "queued")
+        XCTAssertFalse(SentrySDK.isEnabled, "nothing started the SDK")
+
+        XCTAssertEqual(run("start", [["dsn": Self.dsn]]).message as? String, "started")
+
+        let serialized = scope().serialize()
+        let user = serialized["user"] as? [String: Any]
+        XCTAssertEqual(user?["id"] as? String, "42", "the last user wins")
+        XCTAssertEqual(user?["email"] as? String, "user@example.com")
+        let tags = scope().tags
+        XCTAssertEqual(tags["region"], "IE")
+        XCTAssertEqual(tags["tier"], "2", "the last value of a tag wins")
+        XCTAssertNil(tags["gone"], "a tag removed before start is not there")
+        let contexts = serialized["context"] as? [String: Any]
+        XCTAssertEqual((contexts?["account"] as? [String: Any])?["animals"] as? Int, 120)
+        XCTAssertNil(contexts?["farm"], "a context removed before start is not there")
+
+        // what was kept is applied once: a later change is the page's own, not a replay
+        XCTAssertEqual(run("setTags", [["tier": 3]]).message as? String, "set")
+        XCTAssertEqual(scope().tags["tier"], "3")
+    }
+
+    func testAUserClearedBeforeStartStaysCleared() {
+        run("setUser", [["id": "42"]])
+        XCTAssertEqual(run("setUser", [NSNull()]).message as? String, "queued")
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertNil(scope().serialize()["user"])
+    }
+
+    func testASecondPluginInstanceFindsTheSdkRunningAndWorksOnIt() {
+        run("start", [["dsn": Self.dsn, "release": "tests@0.1.0"]])
+
+        // a view controller that is made again brings new plugin instances to an SDK that is still up
+        let recreated = SentrySdk()
+        let recreatedDelegate = RecordingCommandDelegate()
+        recreated.commandDelegate = recreatedDelegate
+        XCTAssertEqual(
+            run("start", [["dsn": Self.dsn, "release": "other"]], on: recreated, recordedBy: recreatedDelegate).message as? String,
+            "already started"
+        )
+        XCTAssertEqual(
+            run("setTags", [["from": "second"]], on: recreated, recordedBy: recreatedDelegate).message as? String,
+            "set",
+            "a scope call is applied, not queued"
+        )
+        XCTAssertEqual(scope().tags["from"], "second")
+    }
+
+    func testAnSdkTheAppStartedItselfCountsAsStarted() {
+        SentrySDK.start { options in
+            options.dsn = Self.dsn
+            options.releaseName = "app@1"
+        }
+        XCTAssertEqual(run("start", [["dsn": Self.dsn, "release": "tests@0.1.0"]]).message as? String, "already started")
         XCTAssertTrue(SentrySDK.isEnabled)
     }
 

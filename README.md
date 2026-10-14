@@ -82,10 +82,16 @@ no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`
 
 `start(options): Promise<string>`
 
-`SentrySDK.start` / `SentryAndroid.init` with the options below. Answers `started`; a second call
-answers `already started` and changes nothing. Call it once, after `deviceready`, on **every
-launch**: sentry-cocoa sends a crash report on the next start of the SDK, so an app that starts it
-only sometimes loses the crashes in between.
+`SentrySDK.start` / `SentryAndroid.init` with the options below. Answers `started`. If the SDK is
+already running, whoever started it, it answers `already started` and changes nothing: the SDK is
+one per process, and a plugin instance only lives as long as its web view, so after Android
+recreates an Activity the new instance finds the SDK still up. Call it once, after `deviceready`,
+on **every launch**: sentry-cocoa sends a crash report on the next start of the SDK, so an app that
+starts it only sometimes loses the crashes in between.
+
+A `dsn` the SDK cannot parse is **refused**, and the SDK stays off, so the page can try again with a
+good one: the promise rejects with `start was refused: ...`. (sentry-cocoa alone would start without
+a DSN, send nothing and say so only in its log; the plugin checks with the SDK's own parser first.)
 
 | Option | Default | Platform |
 | --- | --- | --- |
@@ -102,20 +108,29 @@ only sometimes loses the crashes in between.
 `setUser(user | null): Promise<string>`
 
 Sets the user on the native scope (`id`, `email`, `username`), or clears it with `null`. Answers
-`set` or `cleared`.
+`set` or `cleared`, or `queued`: see below.
 
 ## setTags
 
 `setTags({ key: value | null }): Promise<string>`
 
 Sets tags on the native scope; a `null` value removes that tag. A boolean reaches Sentry as `true`
-or `false`, a number as its text. Answers `set`.
+or `false`, a number as its text. Answers `set`, or `queued`: see below.
 
 ## setContext
 
 `setContext(key, object | null): Promise<string>`
 
-Sets a named context (an object) on the native scope, or removes it with `null`. Answers `set`.
+Sets a named context (an object) on the native scope, or removes it with `null`. Answers `set`, or
+`queued`: see below.
+
+### Before `start`
+
+A scope call made while the SDK is not running would change a scope that the SDK throws away when it
+starts. So the plugin keeps it instead, answers `queued`, and `start` applies it: the **last**
+change of each key (the user, each tag, each context), in no particular order between keys. The
+order of the calls does not matter, which is what an app needs when the user is known before the
+SDK is up. Nothing is kept for an SDK that never starts.
 
 ## crash
 

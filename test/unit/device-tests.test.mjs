@@ -26,7 +26,7 @@ test('tests/package.json names the same id, and tests/ is not published', () => 
   assert.ok(!pkg.files.includes('tests'), 'package.json "files" must leave tests/ out');
 });
 
-/** What native answers per action, as both platforms do; `started` flips after the first start. */
+/** What native answers per action, as both platforms do; `started` flips after the first start, and a scope call before it is kept ("queued"). */
 function fakeNative() {
   let started = false;
   return (success, failure, service, action, args) => {
@@ -34,13 +34,14 @@ function fakeNative() {
     const answer = {
       start: () => {
         if (!args[0] || !args[0].dsn) return failure('start needs an options object with a dsn');
-        const was = started;
+        if (started) return success('already started');
+        if (!/^https?:\/\/\w+@[^/]+\/\d+$/.test(args[0].dsn)) return failure('start was refused: the dsn does not parse');
         started = true;
-        success(was ? 'already started' : 'started');
+        success('started');
       },
-      setUser: () => success(args[0] === null ? 'cleared' : 'set'),
-      setTags: () => (args[0] && typeof args[0] === 'object' ? success('set') : failure('setTags needs an object')),
-      setContext: () => (args[0] ? success('set') : failure('setContext needs a key')),
+      setUser: () => success(!started ? 'queued' : args[0] === null ? 'cleared' : 'set'),
+      setTags: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'set' : 'queued') : failure('setTags needs an object')),
+      setContext: () => (args[0] ? success(started ? 'set' : 'queued') : failure('setContext needs a key')),
       crash: () => {},
     }[action];
     if (!answer) return failure(`unknown action ${action}`);
