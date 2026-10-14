@@ -4,3 +4,4 @@ node_modules
 package-lock.json
 .plugin
 build.local.json
+www/e2e.js

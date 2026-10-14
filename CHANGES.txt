@@ -1,4 +1,5 @@
 = next =
+An end-to-end test: the demo app, built with the plugin installed the way an app installs it, crashes itself on an Android emulator and sends its report to an ingest endpoint on the runner, and the test reads the SDK and its version, the release, the environment, the user, the tags, the context and the exception. No Sentry account and no secret, so it runs for every pull request
 Every name derives from the plugin id, on both platforms: window.SentrySdk, the SentrySdk service, class and Swift target, and the Android package io.github.maximbelov.sentrysdk, with the Kotlin source under a slash-separated directory (they were SentryNative and io.github.maximbelov.sentry). Breaking: an app calls window.SentrySdk
 test/android builds with the Gradle and Android Gradle plugin of the cordova-android it tests against, and Dependabot leaves them alone
 

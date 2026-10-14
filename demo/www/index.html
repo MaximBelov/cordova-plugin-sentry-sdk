@@ -28,6 +28,8 @@
   <button id="clear" data-cy="clear">Clear log</button>
   <pre id="log" data-cy="log"></pre>
   <script src="cordova.js"></script>
+  <!-- written by test/e2e: the DSN, release and environment of a run. Absent in a normal build, and then the page does nothing by itself. -->
+  <script src="e2e.js"></script>
   <script>
     var logEl = document.getElementById('log');
     // Every call writes one line, "<call>: ok <result>" or "<call>: fail <reason>", so a probe can read the outcome off the page.
@@ -45,6 +47,28 @@
           .catch(function (error) { show(call, 'fail', String(error)); });
       });
     }
+    // The end-to-end scenario (test/e2e): start the SDK against the DSN it was given, set the scope, crash. The launch after the crash only
+    // starts the SDK, which is when sentry-android sends what it kept on disk. The flag that tells the two launches apart is in
+    // localStorage; if the WebView lost it in the crash the second launch crashes again, and the first report has arrived by then anyway.
+    function runE2e(cfg) {
+      var crashedBefore = false;
+      try { crashedBefore = localStorage.getItem('e2e.crashed') === cfg.release; } catch (e) {}
+      console.log('E2E launch, crashed before: ' + crashedBefore);
+      SentrySdk.start({ dsn: cfg.dsn, release: cfg.release, environment: cfg.environment, appHangTimeoutInterval: 7 })
+        .then(function (result) { show('e2e start', 'ok', result); })
+        .then(function () {
+          if (crashedBefore) { return null; }
+          return SentrySdk.setUser({ id: '42', email: 'demo@example.com', username: 'demo' })
+            .then(function () { return SentrySdk.setTags({ 'account.region': 'IE', premium: true, gone: null }); })
+            .then(function () { return SentrySdk.setContext('account', { animals: 120, premium: true }); })
+            .then(function () {
+              try { localStorage.setItem('e2e.crashed', cfg.release); } catch (e) {}
+              return new Promise(function (resolve) { setTimeout(resolve, 3000); });
+            })
+            .then(function () { console.log('E2E crashing'); return SentrySdk.crash(); });
+        })
+        .catch(function (error) { console.log('E2E failed: ' + error); show('e2e', 'fail', String(error)); });
+    }
     document.addEventListener('deviceready', function () {
       document.getElementById('state').textContent = 'ready: ' + cordova.platformId + ', SentrySdk ' + (window.SentrySdk ? 'present' : 'MISSING');
       var dsnEl = document.getElementById('dsn');
@@ -59,6 +83,7 @@
       run('setContext', function () { return SentrySdk.setContext('account', { animals: 120, premium: true }); });
       run('crash', function () { return SentrySdk.crash(); });
       document.getElementById('clear').addEventListener('click', function () { logEl.textContent = ''; window.results = []; });
+      if (window.E2E) { runE2e(window.E2E); }
     });
   </script>
 </body>
