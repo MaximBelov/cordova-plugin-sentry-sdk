@@ -1,0 +1,23 @@
+name: SDK pins
+# The two native SDKs are pinned in this repository (Package.swift and plugin.xml), and Dependabot cannot move either pin: its Swift jobs
+# failed on the local path to cordova-ios in test/ios, and plugin.xml is not a manifest it reads. So this looks every Monday, and on
+# demand, at the latest release of each SDK, and opens an issue when a pin is behind it. scripts/check-pins.mjs does the looking.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+      - run: node scripts/check-pins.mjs --issue
+        env:
+          GH_TOKEN: ${{ github.token }}

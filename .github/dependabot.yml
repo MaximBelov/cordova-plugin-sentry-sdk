@@ -3,6 +3,8 @@
 # cordova-android and cordova-ios (npm) and org.apache.cordova:framework (Gradle, test/android) are released together and belong
 # together; so do the sentry-cocoa pin (Package.swift, test/ios/Package.swift) and io.sentry:sentry-android (plugin.xml,
 # test/android): when one of a pair moves, move the other in the same step (test/unit/platform-parity.test.mjs says when they differ).
+# Swift is not here: Dependabot's Swift jobs failed on both manifests (the local path to cordova-ios in test/ios, and a Package.swift
+# that names a branch), so .github/workflows/pins.yaml compares the two SDK pins with their latest releases instead.
 version: 2
 
 updates:
@@ -62,20 +64,4 @@ updates:
       - dependency-name: com.android.library
       - dependency-name: org.jetbrains.kotlin.android
       - dependency-name: org.apache.cordova:framework
-    labels: [dependencies]
-
-  # sentry-cocoa, pinned in the plugin's own Package.swift and in the iOS tests'
-  - package-ecosystem: swift
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-    labels: [dependencies]
-  - package-ecosystem: swift
-    directory: /test/ios
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
     labels: [dependencies]
