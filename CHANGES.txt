@@ -1,4 +1,5 @@
 = next =
+Android: sentry-android 8.61.0 (it was 8.60.0)
 Android: the sentry-android artifact is the plugin variable SENTRY_ANDROID_ARTIFACT, and the default is sentry-android-core. The plugin took sentry-android before, which brings the NDK module (crashes in native C and C++ code) and Session Replay along. An app that wants native crashes installs with SENTRY_ANDROID_ARTIFACT=sentry-android; one that did not know it had them loses them without it
 crash() is refused, on both platforms, unless the last accepted start was given allowCrash: true. A device probe has to pass the option
 The wrapper settles what the platforms read differently: a number in a user's id, email or username is its text, an empty string and null leave the field out, and a user, tags or a context of another type are refused with the reason. An array as a context used to be a removal, and an id that was a number was kept on Android and dropped on iOS
