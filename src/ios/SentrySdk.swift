@@ -7,7 +7,10 @@ import Sentry
 /// private headers -- the JS SDK sends its own events, this only owns what the page cannot see.
 @objc(SentrySdk) class SentrySdk: CDVPlugin {
 
-    private var started = false
+    /// Whether the SDK is running is the SDK's to say (`SentrySDK.isEnabled`): it is one per process, and a plugin instance only as
+    /// long as its view controller. What the plugin does remember is what the page set before the SDK was running: the last change of
+    /// each key, applied by `start`.
+    private var pending: [String: () -> Void] = [:]
 
     @objc(start:)
     func start(_ command: CDVInvokedUrlCommand) {
@@ -15,13 +18,39 @@ import Sentry
             reply(command, ok: false, "start needs an options object with a dsn")
             return
         }
-        if started {
+        // Started by an earlier instance of this plugin, or by the app itself: either way it is running, and its options are its own.
+        if SentrySDK.isEnabled {
             reply(command, ok: true, "already started")
             return
         }
+        // A dsn the SDK cannot parse does not stop `SentrySDK.start`: the SDK starts without a dsn, sends nothing, and says so only in its
+        // own log. So the SDK's parser, on a scratch Options, decides first, and a refused start leaves the page free to try again.
+        let probe = Options()
+        probe.dsn = dsn
+        guard probe.parsedDsn != nil else {
+            reply(command, ok: false, "start was refused: the dsn does not parse")
+            return
+        }
         SentrySDK.start { SentrySdk.configure($0, from: options) }
-        started = true
+        guard SentrySDK.isEnabled else {
+            reply(command, ok: false, "start was refused: the SDK did not start")
+            return
+        }
+        pending.values.forEach { $0() }
+        pending.removeAll()
         reply(command, ok: true, "started")
+    }
+
+    /// Runs a change of the scope now, or, while the SDK is not running, keeps the last change of its key for `start`: a call before the
+    /// SDK is up changes a scope that is thrown away when it starts. Says which it did.
+    @discardableResult
+    private func applyOrKeep(_ key: String, _ change: @escaping () -> Void) -> Bool {
+        if SentrySDK.isEnabled {
+            change()
+            return true
+        }
+        pending[key] = change
+        return false
     }
 
     /// The options the page passes, applied to the SDK's. On its own so the mapping can be tested without a running SDK.
@@ -41,17 +70,19 @@ import Sentry
 
     @objc(setUser:)
     func setUser(_ command: CDVInvokedUrlCommand) {
-        guard let dict = command.argument(at: 0) as? [String: Any] else {
-            SentrySDK.setUser(nil)
-            reply(command, ok: true, "cleared")
-            return
+        let dict = command.argument(at: 0) as? [String: Any]
+        let applied = applyOrKeep("user") {
+            guard let dict = dict else {
+                SentrySDK.setUser(nil)
+                return
+            }
+            let user = User()
+            if let id = dict["id"] as? String { user.userId = id }
+            if let email = dict["email"] as? String { user.email = email }
+            if let username = dict["username"] as? String { user.username = username }
+            SentrySDK.setUser(user)
         }
-        let user = User()
-        if let id = dict["id"] as? String { user.userId = id }
-        if let email = dict["email"] as? String { user.email = email }
-        if let username = dict["username"] as? String { user.username = username }
-        SentrySDK.setUser(user)
-        reply(command, ok: true, "set")
+        reply(command, ok: true, !applied ? "queued" : (dict == nil ? "cleared" : "set"))
     }
 
     @objc(setTags:)
@@ -60,16 +91,20 @@ import Sentry
             reply(command, ok: false, "setTags needs an object")
             return
         }
-        SentrySDK.configureScope { scope in
-            for (key, value) in tags {
-                if value is NSNull {
-                    scope.removeTag(key: key)
-                } else {
-                    scope.setTag(value: SentrySdk.tagText(value), key: key)
+        var applied = true
+        for (key, value) in tags {
+            let change = {
+                SentrySDK.configureScope { scope in
+                    if value is NSNull {
+                        scope.removeTag(key: key)
+                    } else {
+                        scope.setTag(value: SentrySdk.tagText(value), key: key)
+                    }
                 }
             }
+            applied = applyOrKeep("tag:\(key)", change) && applied
         }
-        reply(command, ok: true, "set")
+        reply(command, ok: true, applied ? "set" : "queued")
     }
 
     @objc(setContext:)
@@ -79,14 +114,16 @@ import Sentry
             return
         }
         let value = command.argument(at: 1) as? [String: Any]
-        SentrySDK.configureScope { scope in
-            if let value = value {
-                scope.setContext(value: value, key: key)
-            } else {
-                scope.removeContext(key: key)
+        let applied = applyOrKeep("context:\(key)") {
+            SentrySDK.configureScope { scope in
+                if let value = value {
+                    scope.setContext(value: value, key: key)
+                } else {
+                    scope.removeContext(key: key)
+                }
             }
         }
-        reply(command, ok: true, "set")
+        reply(command, ok: true, applied ? "set" : "queued")
     }
 
     /// For a device probe: the process goes down, so this never answers.

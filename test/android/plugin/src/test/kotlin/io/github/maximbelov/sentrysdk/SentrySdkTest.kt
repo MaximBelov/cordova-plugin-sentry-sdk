@@ -2,6 +2,7 @@ package io.github.maximbelov.sentrysdk
 
 import androidx.appcompat.app.AppCompatActivity
 import io.sentry.Sentry
+import io.sentry.android.core.SentryAndroid
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaInterfaceImpl
 import org.apache.cordova.CordovaPreferences
@@ -32,6 +33,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class SentrySdkTest {
+    private lateinit var activity: AppCompatActivity
     private lateinit var webView: CordovaWebView
     private lateinit var plugin: SentrySdk
     private var calls = 0
@@ -41,12 +43,14 @@ class SentrySdkTest {
         // cordova-android's CordovaInterfaceImpl takes an AppCompatActivity, which needs an AppCompat theme to be created.
         val controller = Robolectric.buildActivity(AppCompatActivity::class.java)
         controller.get().setTheme(androidx.appcompat.R.style.Theme_AppCompat)
-        val activity = controller.setup().get()
+        activity = controller.setup().get()
         webView = mock(CordovaWebView::class.java)
-        plugin = SentrySdk()
-        // the way Cordova hands a plugin its interface and web view
-        plugin.privateInitialize("SentrySdk", CordovaInterfaceImpl(activity), webView, CordovaPreferences())
+        plugin = newPlugin()
     }
+
+    /** A plugin instance the way Cordova makes one per web view, handing it its interface and web view. */
+    private fun newPlugin(): SentrySdk =
+        SentrySdk().also { it.privateInitialize("SentrySdk", CordovaInterfaceImpl(activity), webView, CordovaPreferences()) }
 
     @After
     fun tearDown() {
@@ -54,12 +58,14 @@ class SentrySdkTest {
     }
 
     /** Runs an action the way Cordova does and returns what the plugin sent to JavaScript. */
-    private fun run(action: String, vararg args: Any?): PluginResult {
+    private fun run(action: String, vararg args: Any?): PluginResult = runOn(plugin, action, *args)
+
+    private fun runOn(target: SentrySdk, action: String, vararg args: Any?): PluginResult {
         val id = "cb" + (++calls)
         val callback = CallbackContext(id, webView)
         val json = JSONArray()
         args.forEach { json.put(it ?: JSONObject.NULL) }
-        assertTrue("the action is known: $action", plugin.execute(action, json, callback))
+        assertTrue("the action is known: $action", target.execute(action, json, callback))
         val sent = ArgumentCaptor.forClass(PluginResult::class.java)
         verify(webView).sendPluginResult(sent.capture(), org.mockito.ArgumentMatchers.eq(id))
         return sent.value
@@ -91,6 +97,86 @@ class SentrySdkTest {
         val second = run("start", json("dsn" to "https://other@127.0.0.1:9/2", "release" to "other"))
         assertEquals("already started", second.strMessage)
         assertEquals("tests@0.1.0", Sentry.getCurrentScopes().options.release)
+    }
+
+    @Test
+    fun `start with a dsn that does not parse is refused and the SDK stays off, so a good one can follow`() {
+        val refused = run("start", json("dsn" to "not a dsn"))
+        assertEquals(PluginResult.Status.ERROR.ordinal, refused.status)
+        assertTrue(refused.message.contains("start was refused"))
+        assertFalse(Sentry.isEnabled())
+
+        assertEquals("started", run("start", json("dsn" to DSN)).strMessage)
+        assertTrue(Sentry.isEnabled())
+    }
+
+    @Test
+    fun `scope calls before start are kept and answered queued, and start applies the last change of each key`() {
+        assertEquals("queued", run("setUser", json("id" to "1")).strMessage)
+        assertEquals("queued", run("setUser", json("id" to "42", "email" to "user@example.com")).strMessage)
+        assertEquals("queued", run("setTags", json("region" to "IE", "gone" to "soon", "tier" to 1)).strMessage)
+        assertEquals("queued", run("setTags", json("gone" to null, "tier" to 2)).strMessage)
+        assertEquals("queued", run("setContext", "account", json("animals" to 7)).strMessage)
+        assertEquals("queued", run("setContext", "account", json("animals" to 120)).strMessage)
+        assertEquals("queued", run("setContext", "farm", json("region" to "IE")).strMessage)
+        assertEquals("queued", run("setContext", "farm", null).strMessage)
+        assertFalse("nothing started the SDK", Sentry.isEnabled())
+
+        assertEquals("started", run("start", json("dsn" to DSN)).strMessage)
+
+        var user: io.sentry.protocol.User? = null
+        var tags: Map<String, String> = emptyMap()
+        var contexts: io.sentry.protocol.Contexts? = null
+        Sentry.configureScope {
+            user = it.user
+            tags = it.tags
+            contexts = it.contexts
+        }
+        assertEquals("the last user wins", "42", user?.id)
+        assertEquals("user@example.com", user?.email)
+        assertEquals("IE", tags["region"])
+        assertEquals("the last value of a tag wins", "2", tags["tier"])
+        assertFalse("a tag removed before start is not there", tags.containsKey("gone"))
+        assertEquals(120, (contexts!!["account"] as Map<*, *>)["animals"])
+        assertNull("a context removed before start is not there", contexts!!["farm"])
+
+        // what was kept is applied once: a later change is the page's own, not a replay
+        assertEquals("set", run("setTags", json("tier" to 3)).strMessage)
+        Sentry.configureScope { tags = it.tags }
+        assertEquals("3", tags["tier"])
+    }
+
+    @Test
+    fun `a user cleared before start stays cleared`() {
+        run("setUser", json("id" to "42"))
+        assertEquals("queued", run("setUser", null).strMessage)
+        run("start", json("dsn" to DSN))
+        var user: io.sentry.protocol.User? = null
+        Sentry.configureScope { user = it.user }
+        assertNull(user)
+    }
+
+    @Test
+    fun `a second plugin instance finds the SDK running, as after an Activity is recreated, and works on it`() {
+        run("start", json("dsn" to DSN, "release" to "tests@0.1.0"))
+
+        val recreated = newPlugin()
+        assertEquals("already started", runOn(recreated, "start", json("dsn" to DSN, "release" to "other")).strMessage)
+        assertEquals("tests@0.1.0", Sentry.getCurrentScopes().options.release)
+        assertEquals("a scope call is applied, not queued", "set", runOn(recreated, "setTags", json("from" to "second")).strMessage)
+        var tags: Map<String, String> = emptyMap()
+        Sentry.configureScope { tags = it.tags }
+        assertEquals("second", tags["from"])
+    }
+
+    @Test
+    fun `an SDK the app started itself counts as started, and its options stay its own`() {
+        SentryAndroid.init(activity) {
+            it.dsn = DSN
+            it.release = "app@1"
+        }
+        assertEquals("already started", run("start", json("dsn" to DSN, "release" to "tests@0.1.0")).strMessage)
+        assertEquals("app@1", Sentry.getCurrentScopes().options.release)
     }
 
     @Test

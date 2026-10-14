@@ -16,7 +16,10 @@ import org.json.JSONObject
  */
 class SentrySdk : CordovaPlugin() {
 
-    private var started = false
+    // Whether the SDK is running is the SDK's to say: it is one per process, and a plugin instance is one per web view, so an
+    // Activity that Android recreates brings a new instance to an SDK that is still up. What the plugin does remember is what the
+    // page set before the SDK was running: the last change of each key, applied by `start`.
+    private val pending = LinkedHashMap<String, () -> Unit>()
 
     override fun execute(action: String, args: JSONArray, callbackContext: CallbackContext): Boolean {
         when (action) {
@@ -37,34 +40,60 @@ class SentrySdk : CordovaPlugin() {
             callbackContext.error("start needs an options object with a dsn")
             return
         }
-        if (started) {
+        // Started by an earlier instance of this plugin, or by the app itself: either way it is running, and its options are its own.
+        if (Sentry.isEnabled()) {
             callbackContext.success("already started")
             return
         }
-        SentryAndroid.init(cordova.context) { sentryOptions ->
-            sentryOptions.dsn = dsn
-            options.optString("release").takeIf { it.isNotEmpty() }?.let { sentryOptions.release = it }
-            options.optString("environment").takeIf { it.isNotEmpty() }?.let { sentryOptions.environment = it }
-            options.optString("dist").takeIf { it.isNotEmpty() }?.let { sentryOptions.dist = it }
-            sentryOptions.isEnableAutoSessionTracking = options.optBoolean("enableAutoSessionTracking", true)
-            sentryOptions.isAnrEnabled = options.optBoolean("enableAnrTracking", true)
+        try {
+            SentryAndroid.init(cordova.context) { sentryOptions ->
+                sentryOptions.dsn = dsn
+                options.optString("release").takeIf { it.isNotEmpty() }?.let { sentryOptions.release = it }
+                options.optString("environment").takeIf { it.isNotEmpty() }?.let { sentryOptions.environment = it }
+                options.optString("dist").takeIf { it.isNotEmpty() }?.let { sentryOptions.dist = it }
+                sentryOptions.isEnableAutoSessionTracking = options.optBoolean("enableAutoSessionTracking", true)
+                sentryOptions.isAnrEnabled = options.optBoolean("enableAnrTracking", true)
+            }
+        } catch (error: IllegalArgumentException) {
+            // A dsn that does not parse: the SDK refuses to start, and so does the plugin, so the page can try again with a good one.
+            callbackContext.error("start was refused: ${error.message}")
+            return
         }
-        started = true
+        if (!Sentry.isEnabled()) {
+            callbackContext.error("start was refused: the SDK did not start")
+            return
+        }
+        pending.values.forEach { it() }
+        pending.clear()
         callbackContext.success("started")
     }
 
-    private fun setUser(user: JSONObject?, callbackContext: CallbackContext) {
-        if (user == null) {
-            Sentry.setUser(null)
-            callbackContext.success("cleared")
-            return
+    /**
+     * Runs a change of the scope now, or, while the SDK is not running, keeps the last change of its key for `start`: a call
+     * before the SDK is up changes a scope that is thrown away when it starts. Says which it did.
+     */
+    private fun applyOrKeep(key: String, change: () -> Unit): Boolean {
+        if (Sentry.isEnabled()) {
+            change()
+            return true
         }
-        Sentry.setUser(User().apply {
-            user.optString("id").takeIf { it.isNotEmpty() }?.let { id = it }
-            user.optString("email").takeIf { it.isNotEmpty() }?.let { email = it }
-            user.optString("username").takeIf { it.isNotEmpty() }?.let { username = it }
-        })
-        callbackContext.success("set")
+        pending[key] = change
+        return false
+    }
+
+    private fun setUser(user: JSONObject?, callbackContext: CallbackContext) {
+        val applied = applyOrKeep("user") {
+            Sentry.setUser(
+                user?.let {
+                    User().apply {
+                        it.optString("id").takeIf { value -> value.isNotEmpty() }?.let { value -> id = value }
+                        it.optString("email").takeIf { value -> value.isNotEmpty() }?.let { value -> email = value }
+                        it.optString("username").takeIf { value -> value.isNotEmpty() }?.let { value -> username = value }
+                    }
+                },
+            )
+        }
+        callbackContext.success(if (!applied) "queued" else if (user == null) "cleared" else "set")
     }
 
     private fun setTags(tags: JSONObject?, callbackContext: CallbackContext) {
@@ -72,10 +101,12 @@ class SentrySdk : CordovaPlugin() {
             callbackContext.error("setTags needs an object")
             return
         }
+        var applied = true
         for (key in tags.keys()) {
-            if (tags.isNull(key)) Sentry.removeTag(key) else Sentry.setTag(key, tags.get(key).toString())
+            val value = if (tags.isNull(key)) null else tags.get(key).toString()
+            applied = applyOrKeep("tag:$key") { if (value == null) Sentry.removeTag(key) else Sentry.setTag(key, value) } && applied
         }
-        callbackContext.success("set")
+        callbackContext.success(if (applied) "set" else "queued")
     }
 
     private fun setContext(key: String, value: JSONObject?, callbackContext: CallbackContext) {
@@ -83,10 +114,12 @@ class SentrySdk : CordovaPlugin() {
             callbackContext.error("setContext needs a key")
             return
         }
-        Sentry.configureScope { scope ->
-            if (value == null) scope.removeContexts(key) else scope.setContexts(key, toMap(value))
+        val applied = applyOrKeep("context:$key") {
+            Sentry.configureScope { scope ->
+                if (value == null) scope.removeContexts(key) else scope.setContexts(key, toMap(value))
+            }
         }
-        callbackContext.success("set")
+        callbackContext.success(if (applied) "set" else "queued")
     }
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
