@@ -272,7 +272,8 @@ build that is minified (R8 or ProGuard). This plugin uploads nothing.
 - sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.60.0 by default) and
   `SENTRY_ANDROID_ARTIFACT`, and an app can install the plugin with others.
 - `test/unit/platform-parity.test.mjs` holds the pins of `plugin.xml`, `Package.swift`, `test/ios`
-  and `test/android` together. No promise is made about a future major of either SDK.
+  and `test/android` together, and a weekly workflow opens an issue when either SDK has a newer release.
+  No promise is made about a future major of either SDK.
 
 # Development
 
@@ -300,6 +301,7 @@ npm run test:paramedic:android:emulator   # the same on an emulator (ANDROID_AVD
 | `test/e2e/` | the demo app crashes itself and its report is read at an endpoint on the runner |
 | `test/coverage/` | the coverage floors each layer holds |
 | `demo/` | a Cordova app with one button per call, for a phone; a bare app, with no Kotlin or deployment-target setting of its own |
+| `scripts/check-pins.mjs` | where the two SDK pins stand against the latest releases; `.github/workflows/pins.yaml` runs it every Monday and opens an issue for a pin that is behind |
 
 The `cordova-paramedic` dev dependency is an alias of `cordova-paramedic-hotfix`, which is built from a fork of
 apache/cordova-paramedic (`MaximBelov/cordova-paramedic`) that runs the tests on a physical iOS device and on a phone over USB.
