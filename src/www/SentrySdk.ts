@@ -47,6 +47,11 @@ export interface SentrySdkStartOptions {
   enableAutoSessionTracking?: boolean;
   /** Default true (Android): an ANR is reported as an event. */
   enableAnrTracking?: boolean;
+  /**
+   * Default false: `crash()` is refused. It takes the process down, so it is for a device test, and the page has to say so here, which
+   * keeps a stray call from ending the app. The last accepted `start` decides.
+   */
+  allowCrash?: boolean;
 }
 
 export interface SentrySdkUser {
@@ -70,18 +75,75 @@ export type SentrySdkScopeAnswer = 'set' | 'queued';
 const call = <T>(action: string, ...args: unknown[]) =>
   new Promise<T>((resolve, reject) => cordova.exec((r) => resolve(r as T), reject, SERVICE, action, args));
 
+/** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
+const refuse = (reason: string): never => {
+  throw reason;
+};
+
+const USER_FIELDS = ['id', 'email', 'username'] as const;
+
+// What native makes of a value it did not expect is not the same on the two platforms (a number is its text on Android and dropped
+// on iOS, a JSON null is the text "null" on one and nothing on the other, an array is a removal on both), so what is settled here is
+// settled once: a number becomes its text, an empty string and null are left out, and anything else is refused.
+const checkUser = (user: SentrySdkUser | null): SentrySdkUser | null => {
+  if (user === null) {
+    return null;
+  }
+  if (typeof user !== 'object' || Array.isArray(user)) {
+    return refuse('setUser needs an object or null');
+  }
+  const checked: SentrySdkUser = {};
+  for (const field of USER_FIELDS) {
+    const value: unknown = user[field];
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    if (typeof value === 'string') {
+      checked[field] = value;
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      checked[field] = String(value);
+    } else {
+      return refuse(`setUser: ${field} has to be a string or a number`);
+    }
+  }
+  return checked;
+};
+
+const checkTags = (tags: Record<string, SentrySdkTagValue>): Record<string, SentrySdkTagValue> => {
+  if (typeof tags !== 'object' || tags === null || Array.isArray(tags)) {
+    return refuse('setTags needs an object');
+  }
+  for (const [key, value] of Object.entries(tags)) {
+    const fine = value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
+    if (!fine) {
+      return refuse(`setTags: the value of ${key} has to be a string, a number, a boolean or null`);
+    }
+  }
+  return tags;
+};
+
+const checkContext = (key: string, value: Record<string, unknown> | null): [string, Record<string, unknown> | null] => {
+  if (typeof key !== 'string' || key === '') {
+    return refuse('setContext needs a key');
+  }
+  if (value !== null && (typeof value !== 'object' || Array.isArray(value))) {
+    return refuse('setContext needs an object or null');
+  }
+  return [key, value];
+};
+
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 export const start = (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', options);
 
 /** Sets the user on the native scope, or clears it with `null`. */
-export const setUser = (user: SentrySdkUser | null) => call<SentrySdkUserAnswer>('setUser', user);
+export const setUser = async (user: SentrySdkUser | null) => call<SentrySdkUserAnswer>('setUser', checkUser(user));
 
 /** Sets tags on the native scope; a `null` value removes that tag. */
-export const setTags = (tags: Record<string, SentrySdkTagValue>) => call<SentrySdkScopeAnswer>('setTags', tags);
+export const setTags = async (tags: Record<string, SentrySdkTagValue>) => call<SentrySdkScopeAnswer>('setTags', checkTags(tags));
 
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
-export const setContext = (key: string, value: Record<string, unknown> | null) =>
-  call<SentrySdkScopeAnswer>('setContext', key, value);
+export const setContext = async (key: string, value: Record<string, unknown> | null) =>
+  call<SentrySdkScopeAnswer>('setContext', ...checkContext(key, value));
 
-/** Crashes the process natively. For a device probe, never for the app: the promise never settles, the app is gone. */
+/** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export const crash = () => call<never>('crash');

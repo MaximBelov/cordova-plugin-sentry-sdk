@@ -25,7 +25,7 @@ plugin built that way moves with every such change. This one calls only the publ
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
 | iOS | sentry-cocoa 9.30.2 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
-| Android | sentry-android 8.60.0 | `io.sentry:sentry-android` from Maven (`SENTRY_ANDROID_SDK_VERSION`) | cordova-android 15.1.0 |
+| Android | sentry-android 8.60.0 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
 
 What the minimums rest on:
 
@@ -61,9 +61,14 @@ What the plugin asks of the app's build, and what the app keeps:
 cordova plugin add cordova-plugin-sentry-sdk
 ```
 
-Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.60.0`), set with
-`cordova plugin add cordova-plugin-sentry-sdk --variable SENTRY_ANDROID_SDK_VERSION=<version>`. The iOS version is pinned in
-`Package.swift`.
+Variables, set with `cordova plugin add cordova-plugin-sentry-sdk --variable NAME=value`:
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SENTRY_ANDROID_SDK_VERSION` | `8.60.0` | the sentry-android release |
+| `SENTRY_ANDROID_ARTIFACT` | `sentry-android-core` | `sentry-android-core` is the SDK: Java and Kotlin crashes, ANRs, and what this plugin calls. `sentry-android` adds the NDK module, which reports crashes in native C and C++ code from any library in the app, and Session Replay, which the plugin never turns on. It puts native libraries for every ABI into the APK, so take it when the app carries native code whose crashes you want. |
+
+The iOS version is pinned in `Package.swift`.
 
 Coming from sentry-cordova: remove it first (`cordova plugin rm sentry-cordova`). Two starts of the native SDK in one process end
 badly: sentry-cocoa warns that "calling start again without close() may lead to undefined behavior", and sentry-android
@@ -139,6 +144,7 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `enableMetricKit` | the SDK's own: `false` in sentry-cocoa 9, `true` in 10. MetricKit delivers the system's hang, CPU and disk-write diagnostics, and is where sentry-cocoa sends you instead of app hang tracking | iOS |
 | `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`). The SDK watches the requests the app's own code makes, another plugin's HTTP calls for one; a request the page makes is made by WebKit's own processes and is not among them. Network breadcrumbs (`enableNetworkBreadcrumbs`) stay on, as the SDK has them | iOS |
 | `enableAnrTracking` | `true` | Android |
+| `allowCrash` | `false`. [`crash()`](#crash) is refused unless the last accepted `start` gave this, so a stray call cannot end the app | both |
 
 ## setUser
 
@@ -169,6 +175,14 @@ change of each key (the user, each tag, each context), in no particular order be
 order of the calls does not matter, which is what an app needs when the user is known before the
 SDK is up. Nothing is kept for an SDK that never starts.
 
+### What is refused
+
+The wrapper settles what the two platforms would otherwise read differently, so a call means the same on both. In a user, a number in
+`id`, `email` or `username` becomes its text, an empty string or `null` leaves the field out, and any other type is refused; a user
+that is not an object or `null` is refused too. `setTags` takes an object whose values are strings, finite numbers, booleans or
+`null`, and `setContext` takes a key that is not empty and an object or `null`: an array, a string or no value is refused, where
+native used to take it as a removal. The promise rejects with the reason, a string that names the call, and nothing is sent.
+
 ## crash
 
 `crash(): Promise<never>`
@@ -177,6 +191,9 @@ Crashes the process natively: `SentrySDK.crash()` on iOS, an uncaught exception 
 on Android. For a device test only; the promise never settles, the app is gone. Relaunch and start
 the SDK again before looking in Sentry: sentry-cocoa sends the report at the next start of the SDK,
 and sentry-android flushes what it can to disk at the crash and sends what is left at the next start.
+
+It is refused, the promise rejecting, unless the last accepted `start` was given `allowCrash: true`. That keeps a stray call
+from ending the app. It is not a lock against a script that can call `start` itself.
 
 ## What arrives, and what does not
 
@@ -188,7 +205,9 @@ matters to you, you want a hybrid SDK such as
 What reaches Sentry through this plugin is what the two SDKs catch in native code: a crash, and on
 iOS a watchdog termination, an app hang (the deprecated option) and, with `enableMetricKit`, the
 system's own diagnostics; on Android an ANR, which the SDK reads from the system's exit records at
-the next start (Android 11 and newer).
+the next start (Android 11 and newer). On Android a crash in native C or C++ code needs the NDK
+module, which is in the `sentry-android` artifact and not in the default one (see
+[Installing](#installing)).
 
 ### Starting late
 
@@ -250,8 +269,8 @@ build that is minified (R8 or ProGuard). This plugin uploads nothing.
 
 - sentry-cocoa is pinned exactly in `Package.swift`, and an app cannot override it: a fix in the SDK
   reaches your app through a release of this plugin.
-- sentry-android is the plugin variable `SENTRY_ANDROID_SDK_VERSION`, 8.60.0 by default, and an app
-  can install the plugin with another.
+- sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.60.0 by default) and
+  `SENTRY_ANDROID_ARTIFACT`, and an app can install the plugin with others.
 - `test/unit/platform-parity.test.mjs` holds the pins of `plugin.xml`, `Package.swift`, `test/ios`
   and `test/android` together, and a weekly workflow opens a pull request that moves a pin when its SDK has a newer release, a major one too.
   No promise is made about a future major of either SDK.

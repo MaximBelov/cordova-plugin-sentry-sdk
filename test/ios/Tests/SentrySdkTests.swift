@@ -54,6 +54,7 @@ final class SentrySdkTests: XCTestCase {
         case "setUser": target.setUser(command)
         case "setTags": target.setTags(command)
         case "setContext": target.setContext(command)
+        case "crash": target.crash(command)
         default: XCTFail("no such method: \(method)")
         }
         XCTAssertEqual(recorder.results.count, before + 1, "\(method) answers exactly once")
@@ -236,5 +237,45 @@ final class SentrySdkTests: XCTestCase {
 
     func testSetContextWithoutAKeyIsRefused() {
         XCTAssertEqual(status(run("setContext", ["", ["x": 1]])), CDVCommandStatus_ERROR)
+    }
+
+    /// The crash itself takes the process down, so it never answers: this calls it the way Cordova does and says whether it went ahead.
+    private func crashAnswers() -> Int {
+        let before = delegate.results.count
+        plugin.crash(CDVInvokedUrlCommand(arguments: [], callbackId: "crash", className: "SentrySdk", methodName: "crash")!)
+        return delegate.results.count - before
+    }
+
+    func testCrashIsRefusedUntilAStartAllowsItAndTheLastAcceptedStartDecides() {
+        var crashes = 0
+        plugin.crashAction = { crashes += 1 }
+        let refused = run("crash", [])
+        XCTAssertEqual(status(refused), CDVCommandStatus_ERROR)
+        XCTAssertTrue((refused.message as? String ?? "").contains("allowCrash"))
+
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "a start without the option does not allow it")
+
+        run("start", [["dsn": Self.dsn, "allowCrash": true]])
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "the last start takes it away again")
+        XCTAssertEqual(crashes, 0, "nothing crashed")
+    }
+
+    func testCrashGoesAheadWhenStartAllowedIt() {
+        var crashes = 0
+        plugin.crashAction = { crashes += 1 }
+        run("start", [["dsn": Self.dsn, "allowCrash": true]])
+        XCTAssertEqual(crashAnswers(), 0, "the crash does not answer: the process would be gone")
+        XCTAssertEqual(crashes, 1)
+    }
+
+    func testAStartThatFindsTheSdkRunningStillTakesTheAllowCrashItIsGiven() {
+        var crashes = 0
+        plugin.crashAction = { crashes += 1 }
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(run("start", [["dsn": Self.dsn, "allowCrash": true]]).message as? String, "already started")
+        XCTAssertEqual(crashAnswers(), 0)
+        XCTAssertEqual(crashes, 1)
     }
 }

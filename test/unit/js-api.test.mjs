@@ -25,6 +25,7 @@ test('every method sends its action to the SentrySdk service, with the arguments
   const { api, calls } = load();
   const cases = [
     ['start', [OPTIONS], 'start', [OPTIONS]],
+    ['start', [{ ...OPTIONS, allowCrash: true }], 'start', [{ ...OPTIONS, allowCrash: true }]],
     ['setUser', [{ id: '42', email: 'a@b.c' }], 'setUser', [{ id: '42', email: 'a@b.c' }]],
     ['setUser', [null], 'setUser', [null]],
     ['setTags', [{ 'farm.region': 'IE', gone: null }], 'setTags', [{ 'farm.region': 'IE', gone: null }]],
@@ -56,4 +57,58 @@ test('the promise resolves with what native answers, and rejects with what nativ
 test('the module exports exactly the five calls the README documents', () => {
   const { api } = load();
   assert.deepEqual(Object.keys(api).sort(), ['crash', 'setContext', 'setTags', 'setUser', 'start']);
+});
+
+/**
+ * What a call comes to: the reason it was refused with, or 'sent' when it went to native, where the recorder never answers. A call that
+ * should have been refused and was not therefore fails the test, and does not leave it waiting for a promise that never settles.
+ */
+const outcome = (attempt) =>
+  Promise.race([attempt().then(() => 'answered', (reason) => reason), new Promise((resolve) => setImmediate(() => resolve('sent')))]);
+
+test('a user is settled before it is sent: a number is its text, an empty value and null are left out, the rest is dropped', () => {
+  const { api, calls } = load();
+  const cases = [
+    [{ id: 42 }, { id: '42' }],
+    [{ id: '', email: null, username: undefined }, {}],
+    [{ id: '1', email: 'a@b.c', username: 'u', ip_address: '10.0.0.1' }, { id: '1', email: 'a@b.c', username: 'u' }],
+  ];
+  for (const [given, sent] of cases) {
+    calls.length = 0;
+    api.setUser(given);
+    assert.deepEqual(calls[0].args, [sent], JSON.stringify(given));
+  }
+});
+
+test('what native would read differently on the two platforms is refused before it is sent, as a string that names the call', async () => {
+  const { api, calls } = load();
+  const refused = [
+    ...['42', [], 7, { id: {} }, { id: [] }, { email: true }, { id: Number.NaN }, { username: Number.POSITIVE_INFINITY }].map((user) =>
+      ['setUser', () => api.setUser(user)],
+    ),
+    ...[null, [], 'x', 7, { a: {} }, { a: [1] }, { a: Number.NaN }, { a: undefined }].map((tags) => ['setTags', () => api.setTags(tags)]),
+    ...[['', {}], [7, {}], ['k', []], ['k', 'x'], ['k', 7], ['k', undefined]].map(([key, value]) => ['setContext', () => api.setContext(key, value)]),
+  ];
+  for (const [call, attempt] of refused) {
+    const reason = await outcome(attempt);
+    assert.ok(typeof reason === 'string' && reason !== 'sent' && reason.includes(call), `${call} was not refused with a reason: ${reason}`);
+  }
+  assert.equal(calls.length, 0, 'nothing reached native');
+});
+
+test('what is fine goes through unchanged, null included', () => {
+  const { api, calls } = load();
+  api.setUser(null);
+  api.setTags({ a: 'x', b: 7, c: true, d: false, e: null });
+  api.setContext('farm', { animals: 3, nested: { list: [1, 'two', null] } });
+  api.setContext('farm', null);
+  assert.deepEqual(
+    calls.map((call) => [call.action, call.args]),
+    [
+      ['setUser', [null]],
+      ['setTags', [{ a: 'x', b: 7, c: true, d: false, e: null }]],
+      ['setContext', ['farm', { animals: 3, nested: { list: [1, 'two', null] } }]],
+      ['setContext', ['farm', null]],
+    ],
+  );
 });

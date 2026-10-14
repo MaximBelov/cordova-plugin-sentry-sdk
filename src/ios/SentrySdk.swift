@@ -12,14 +12,23 @@ import Sentry
     /// each key, applied by `start`.
     private var pending: [String: () -> Void] = [:]
 
+    /// `crash` takes the process down, so it is refused unless the page said so in an accepted `start`: that it is a device test. It is the
+    /// page's word and not a lock, so it keeps a stray call from ending the app, not a script that can call `start` itself.
+    private var crashAllowed = false
+
+    /// What `crash` does once it is allowed: a property, so that a test can see it called without the test process going down.
+    var crashAction: () -> Void = { SentrySDK.crash() }
+
     @objc(start:)
     func start(_ command: CDVInvokedUrlCommand) {
         guard let options = command.argument(at: 0) as? [String: Any], let dsn = options["dsn"] as? String, !dsn.isEmpty else {
             reply(command, ok: false, "start needs an options object with a dsn")
             return
         }
+        let allowCrash = (options["allowCrash"] as? Bool) ?? false
         // Started by an earlier instance of this plugin, or by the app itself: either way it is running, and its options are its own.
         if SentrySDK.isEnabled {
+            crashAllowed = allowCrash
             reply(command, ok: true, "already started")
             return
         }
@@ -38,6 +47,7 @@ import Sentry
         }
         pending.values.forEach { $0() }
         pending.removeAll()
+        crashAllowed = allowCrash
         reply(command, ok: true, "started")
     }
 
@@ -130,10 +140,14 @@ import Sentry
         reply(command, ok: true, applied ? "set" : "queued")
     }
 
-    /// For a device probe: the process goes down, so this never answers.
+    /// For a device probe: the process goes down, so this never answers. Refused unless `start` allowed it.
     @objc(crash:)
     func crash(_ command: CDVInvokedUrlCommand) {
-        SentrySDK.crash()
+        guard crashAllowed else {
+            reply(command, ok: false, "crash is refused: it is for a device test, and start has to be given allowCrash: true")
+            return
+        }
+        crashAction()
     }
 
     /// A JSON boolean arrives as an NSNumber and would print as 0 or 1; Sentry filters on `true`/`false`.

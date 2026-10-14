@@ -54,6 +54,26 @@ exports.defineAutoTests = function () {
     });
   });
 
+  describe('crash', function () {
+    it('is refused unless start was given allowCrash, so a stray call cannot end the app', function (done) {
+      api
+        .start({ dsn: DSN })
+        .then(function () {
+          return api.crash();
+        })
+        .then(
+          function () {
+            fail('a crash that start never allowed went ahead');
+            done();
+          },
+          function (error) {
+            expect(String(error)).toMatch(/allowCrash/);
+            done();
+          },
+        );
+    });
+  });
+
   describe('the scope', function () {
     // A scope call is applied while the SDK is running, and kept for `start` before that (it answers "queued"). Jasmine runs the specs
     // in a random order, so each of these starts the SDK first; a start after another spec's answers "already started".
@@ -99,9 +119,11 @@ exports.defineAutoTests = function () {
 
 exports.defineManualTests = function (contentEl, createActionButton) {
   contentEl.innerHTML =
-    '<p>Crash: the process goes down, and the native SDK sends the report on the NEXT launch. Start the SDK with a real DSN first ' +
-    '(the automatic tests start it with one that reaches nothing), relaunch the app after the crash, and look in Sentry.</p>';
+    '<p>Crash: the process goes down. The button starts the SDK with allowCrash, which is what lets a crash through, against a DSN that ' +
+    'reaches nothing, so no report is sent; use the demo app with a real DSN to see one in Sentry.</p>';
   createActionButton('Crash the process natively', function () {
-    window.SentrySdk.crash();
+    window.SentrySdk.start({ dsn: DSN, allowCrash: true }).then(function () {
+      window.SentrySdk.crash();
+    });
   });
 };

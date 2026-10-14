@@ -251,12 +251,36 @@ class SentrySdkTest {
     }
 
     @Test
-    fun `crash throws on the main thread, which is what takes a process down`() {
+    fun `crash is refused until a start allows it, and the last accepted start decides`() {
+        val refused = run("crash")
+        assertEquals(PluginResult.Status.ERROR.ordinal, refused.status)
+        assertTrue(refused.message.contains("allowCrash"))
+
+        run("start", json("dsn" to DSN))
+        assertEquals("a start without the option does not allow it", PluginResult.Status.ERROR.ordinal, run("crash").status)
+
+        run("start", json("dsn" to DSN, "allowCrash" to true))
+        run("start", json("dsn" to DSN))
+        assertEquals("the last start takes it away again", PluginResult.Status.ERROR.ordinal, run("crash").status)
+    }
+
+    @Test
+    fun `crash throws on the main thread when start allowed it, which is what takes a process down`() {
+        run("start", json("dsn" to DSN, "allowCrash" to true))
         // Robolectric runs the main looper on the test thread, so runOnUiThread runs the block here and the throw is observable.
         val thrown = assertThrows(RuntimeException::class.java) {
             plugin.execute("crash", JSONArray(), CallbackContext("x", webView))
         }
         assertTrue(thrown.message!!.contains("test crash"))
+    }
+
+    @Test
+    fun `a start that finds the SDK running still takes the allowCrash it is given`() {
+        run("start", json("dsn" to DSN))
+        assertEquals("already started", run("start", json("dsn" to DSN, "allowCrash" to true)).strMessage)
+        assertThrows(RuntimeException::class.java) {
+            plugin.execute("crash", JSONArray(), CallbackContext("x", webView))
+        }
     }
 
     companion object {

@@ -23,6 +23,7 @@ async function app(): Promise<void> {
     enableAnrTracking: true,
     enableCaptureFailedRequests: false,
     enableMetricKit: true,
+    allowCrash: false,
   });
   // @ts-expect-error start answers `started` or `already started`, never `set`
   const wrongStart: 'set' = await sdk.start({ dsn: 'x' });
