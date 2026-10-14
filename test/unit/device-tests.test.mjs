@@ -30,7 +30,7 @@ test('tests/package.json names the same id, and tests/ is not published', () => 
 function fakeNative() {
   let started = false;
   return (success, failure, service, action, args) => {
-    assert.equal(service, 'SentryNative');
+    assert.equal(service, 'SentrySdk');
     const answer = {
       start: () => {
         if (!args[0] || !args[0].dsn) return failure('start needs an options object with a dsn');
@@ -97,9 +97,9 @@ async function runJasmineLike(define) {
 }
 
 globalThis.cordova = { exec: fakeNative(), platformId: 'ios' };
-const wrapper = join(root, 'www', 'sentryNative.js');
+const wrapper = join(root, 'www', 'SentrySdk.js');
 delete require.cache[wrapper];
-globalThis.window = { SentryNative: require(wrapper) };
+globalThis.window = { SentrySdk: require(wrapper) };
 const { defineAutoTests, defineManualTests } = require(join(root, 'tests', 'tests.js'));
 await runJasmineLike(defineAutoTests);
 

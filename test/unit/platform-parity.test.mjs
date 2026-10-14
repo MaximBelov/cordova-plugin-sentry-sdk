@@ -10,15 +10,15 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
-const js = read('www/sentryNative.js');
+const js = read('www/SentrySdk.js');
 /** JavaScript export name -> the native action it sends. */
 const actionOf = Object.fromEntries(
   [...js.matchAll(/^const (\w+) = \([^)]*\) => call\('(\w+)'/gm)].map((match) => [match[1], match[2]]),
 );
 const methods = Object.keys(actionOf);
 
-const iosActions = new Set([...read('src/ios/SentryNative.swift').matchAll(/^\s*@objc\((\w+):\)/gm)].map((m) => m[1]));
-const androidActions = new Set([...read('src/android/SentryNative.kt').matchAll(/^\s*"(\w+)" -> /gm)].map((m) => m[1]));
+const iosActions = new Set([...read('src/ios/SentrySdk.swift').matchAll(/^\s*@objc\((\w+):\)/gm)].map((m) => m[1]));
+const androidActions = new Set([...read('src/android/SentrySdk.kt').matchAll(/^\s*"(\w+)" -> /gm)].map((m) => m[1]));
 
 test('the JavaScript sends an action per export, and both platforms handle exactly those', () => {
   assert.ok(methods.length >= 5, 'the exports were found');
@@ -31,7 +31,7 @@ const readme = read('README.md');
 
 test('the README has a section and an index entry for every call, and every index link finds its section', () => {
   const sections = [...readme.matchAll(/^## (\w+)\s*$/gm)].map((m) => m[1]);
-  const index = [...readme.matchAll(/^- \[SentryNative\.(\w+)\]\(#(\w+)\)/gm)].map((m) => [m[1], m[2]]);
+  const index = [...readme.matchAll(/^- \[SentrySdk\.(\w+)\]\(#(\w+)\)/gm)].map((m) => [m[1], m[2]]);
   assert.deepEqual(methods.filter((name) => !sections.includes(name)), [], 'a section for every call');
   assert.deepEqual(methods.filter((name) => !index.some(([indexed]) => indexed === name)), [], 'an index entry for every call');
   assert.deepEqual(index.filter(([, anchor]) => !sections.includes(anchor)), [], 'every index link finds its section');

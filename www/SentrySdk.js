@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.crash = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
-const SERVICE = 'SentryNative';
+const SERVICE = 'SentrySdk';
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 const start = (options) => call('start', options);

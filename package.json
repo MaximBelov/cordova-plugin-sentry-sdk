@@ -37,7 +37,7 @@
     "test": "node --test test/unit/*.test.mjs",
     "test:unit": "node --test test/unit/*.test.mjs",
     "test:unit:coverage": "mkdir -p coverage && node --test --experimental-test-coverage --test-coverage-include=\"www/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/js.lcov test/unit/*.test.mjs && node test/coverage/summarize.mjs js",
-    "test:ios": "cd test/ios && xcodebuild test -scheme SentryNative -destination \"platform=iOS Simulator,name=$(node simulator.mjs)\"",
+    "test:ios": "cd test/ios && xcodebuild test -scheme SentrySdk -destination \"platform=iOS Simulator,name=$(node simulator.mjs)\"",
     "test:ios:coverage": "cd test/ios && ./coverage.sh && cd ../.. && node test/coverage/summarize.mjs ios",
     "test:android": "cd test/android && ./gradlew test",
     "test:android:coverage": "cd test/android && ./gradlew createDebugUnitTestCoverageReport && cd ../.. && node test/coverage/summarize.mjs android",

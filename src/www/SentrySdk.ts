@@ -15,9 +15,9 @@ declare const cordova: {
   ): void;
 };
 
-const SERVICE = 'SentryNative';
+const SERVICE = 'SentrySdk';
 
-export interface SentryNativeStartOptions {
+export interface SentrySdkStartOptions {
   dsn: string;
   /** The same value the JS SDK reports, so native and JS events of one build land on one release. */
   release?: string;
@@ -35,26 +35,26 @@ export interface SentryNativeStartOptions {
   enableAnrTracking?: boolean;
 }
 
-export interface SentryNativeUser {
+export interface SentrySdkUser {
   id?: string;
   email?: string;
   username?: string;
 }
 
 /** A tag value; `null` removes the tag. */
-export type SentryNativeTagValue = string | number | boolean | null;
+export type SentrySdkTagValue = string | number | boolean | null;
 
 const call = <T = void>(action: string, ...args: unknown[]) =>
   new Promise<T>((resolve, reject) => cordova.exec((r) => resolve(r as T), reject, SERVICE, action, args));
 
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-export const start = (options: SentryNativeStartOptions) => call('start', options);
+export const start = (options: SentrySdkStartOptions) => call('start', options);
 
 /** Sets the user on the native scope, or clears it with `null`. */
-export const setUser = (user: SentryNativeUser | null) => call('setUser', user);
+export const setUser = (user: SentrySdkUser | null) => call('setUser', user);
 
 /** Sets tags on the native scope; a `null` value removes that tag. */
-export const setTags = (tags: Record<string, SentryNativeTagValue>) => call('setTags', tags);
+export const setTags = (tags: Record<string, SentrySdkTagValue>) => call('setTags', tags);
 
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export const setContext = (key: string, value: Record<string, unknown> | null) => call('setContext', key, value);

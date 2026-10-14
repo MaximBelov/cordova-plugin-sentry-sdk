@@ -38,32 +38,45 @@ cordova plugin add cordova-plugin-sentry-sdk
 
 Variables: `SENTRY_ANDROID_SDK_VERSION` (default `8.60.0`). The iOS version is pinned in `Package.swift`.
 
+## Names
+
+Every name derives from the plugin id, `cordova-plugin-sentry-sdk`, the way the fixture plugins of cordova-android derive theirs
+(`cordova-plugin-fake` is `Fake`, `dummyplugin` is a class `DummyPlugin` in a package ending in `dummyplugin`), and both platforms use the
+same ones:
+
+| What | Name |
+| --- | --- |
+| plugin `<name>`, JS module, `cordova.exec` service, `<feature>` | `SentrySdk` |
+| global | `window.SentrySdk` |
+| iOS class (`ios-package`), Swift target | `SentrySdk` |
+| Android class and package (`android-package`) | `io.github.maximbelov.sentrysdk.SentrySdk` |
+
 ## Use
 
 ```ts
 document.addEventListener('deviceready', async () => {
-  await window.SentryNative.start({
+  await window.SentrySdk.start({
     dsn: '<your dsn>',
     release: 'my-app@1.2.3',   // the same value the JavaScript SDK reports
     environment: 'production',
     appHangTimeoutInterval: 7, // iOS: seconds of a blocked main thread before a hang is reported
   });
-  await window.SentryNative.setUser({ id: '42', email: 'user@example.com' });
-  await window.SentryNative.setTags({ 'account.region': 'IE', plan: 'pro' });
-  await window.SentryNative.setContext('account', { animals: 120, premium: true });
+  await window.SentrySdk.setUser({ id: '42', email: 'user@example.com' });
+  await window.SentrySdk.setTags({ 'account.region': 'IE', plan: 'pro' });
+  await window.SentrySdk.setContext('account', { animals: 120, premium: true });
 });
 ```
 
 Every call returns a promise. Native answers through Cordova's callbacks, and a refused call (no DSN,
-no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`window.SentryNative`).
+no key) rejects with the reason as a string. Types ship in `types/index.d.ts` (`window.SentrySdk`).
 
 # API
 
-- [SentryNative.start](#start)
-- [SentryNative.setUser](#setUser)
-- [SentryNative.setTags](#setTags)
-- [SentryNative.setContext](#setContext)
-- [SentryNative.crash](#crash)
+- [SentrySdk.start](#start)
+- [SentrySdk.setUser](#setUser)
+- [SentrySdk.setTags](#setTags)
+- [SentrySdk.setContext](#setContext)
+- [SentrySdk.crash](#crash)
 
 ## start
 
@@ -135,10 +148,10 @@ npm run test:paramedic:android:emulator   # the same on an emulator (ANDROID_AVD
 
 | Path | What |
 | --- | --- |
-| `src/ios/SentryNative.swift`, `Package.swift` | the iOS plugin, a Swift package: cordova-ios 8 links it, SPM brings sentry-cocoa |
-| `src/android/SentryNative.kt` | the Android plugin |
-| `src/www/sentryNative.ts` | the TypeScript wrapper (promises); compiled into `www/` (committed) with `npm run build` |
-| `types/index.d.ts` | the `window.SentryNative` global |
+| `src/ios/SentrySdk.swift`, `Package.swift` | the iOS plugin, a Swift package: cordova-ios 8 links it, SPM brings sentry-cocoa |
+| `src/android/SentrySdk.kt` | the Android plugin |
+| `src/www/SentrySdk.ts` | the TypeScript wrapper (promises); compiled into `www/` (committed) with `npm run build` |
+| `types/index.d.ts` | the `window.SentrySdk` global |
 | `tests/` | the test plugin for cordova-paramedic (`defineAutoTests`, and the crash as a manual test) |
 | `test/unit/` | `node --test`, no device: the JavaScript, the parity test, and `tests/` run against a fake native |
 | `test/ios/`, `test/android/` | the native code compiled and tested for real, without an app |

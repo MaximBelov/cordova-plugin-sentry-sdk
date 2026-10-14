@@ -1,3 +1,7 @@
+= next =
+Every name derives from the plugin id, on both platforms: window.SentrySdk, the SentrySdk service, class and Swift target, and the Android package io.github.maximbelov.sentrysdk, with the Kotlin source under a slash-separated directory (they were SentryNative and io.github.maximbelov.sentry). Breaking: an app calls window.SentrySdk
+test/android builds with the Gradle and Android Gradle plugin of the cordova-android it tests against, and Dependabot leaves them alone
+
 = 0.1.2 =
 Android: arrays inside a context are converted element by element, so no JSONObject, JSONArray or JSONObject.NULL reaches Sentry
 Android: sentry-android 8.60.0 by default; plugin.xml declares the android XML namespace it uses

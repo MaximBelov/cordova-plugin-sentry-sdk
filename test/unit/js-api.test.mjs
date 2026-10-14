@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const wrapper = fileURLToPath(new URL('../../www/sentryNative.js', import.meta.url));
+const wrapper = fileURLToPath(new URL('../../www/SentrySdk.js', import.meta.url));
 
 /** The plugin's JavaScript with a recorder as `cordova.exec`; `calls` is what native would have been sent. */
 function load() {
@@ -21,7 +21,7 @@ function load() {
 
 const OPTIONS = { dsn: 'https://key@example.invalid/1', release: 'app@1.0.0', environment: 'test', appHangTimeoutInterval: 7 };
 
-test('every method sends its action to the SentryNative service, with the arguments native reads', () => {
+test('every method sends its action to the SentrySdk service, with the arguments native reads', () => {
   const { api, calls } = load();
   const cases = [
     ['start', [OPTIONS], 'start', [OPTIONS]],
@@ -36,7 +36,7 @@ test('every method sends its action to the SentryNative service, with the argume
     calls.length = 0;
     api[method](...args);
     assert.equal(calls.length, 1, `${method} sends one call`);
-    assert.equal(calls[0].service, 'SentryNative', `${method} service`);
+    assert.equal(calls[0].service, 'SentrySdk', `${method} service`);
     assert.equal(calls[0].action, action, `${method} action`);
     assert.deepEqual(calls[0].args, sent, `${method} arguments`);
   }

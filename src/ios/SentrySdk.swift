@@ -5,7 +5,7 @@ import Sentry
 /// The native Sentry SDK, started and kept in sync from the page. Only the public API of sentry-cocoa:
 /// `SentrySDK.start`, `setUser`, `configureScope`, `crash`. No transport, no envelope bridge, no
 /// private headers -- the JS SDK sends its own events, this only owns what the page cannot see.
-@objc(SentryNative) class SentryNative: CDVPlugin {
+@objc(SentrySdk) class SentrySdk: CDVPlugin {
 
     private var started = false
 
@@ -19,7 +19,7 @@ import Sentry
             reply(command, ok: true, "already started")
             return
         }
-        SentrySDK.start { SentryNative.configure($0, from: options) }
+        SentrySDK.start { SentrySdk.configure($0, from: options) }
         started = true
         reply(command, ok: true, "started")
     }
@@ -65,7 +65,7 @@ import Sentry
                 if value is NSNull {
                     scope.removeTag(key: key)
                 } else {
-                    scope.setTag(value: SentryNative.tagText(value), key: key)
+                    scope.setTag(value: SentrySdk.tagText(value), key: key)
                 }
             }
         }
