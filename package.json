@@ -57,7 +57,7 @@
     "cordova": "^13.0.0",
     "cordova-android": "^15.1.0",
     "cordova-ios": "^8.1.1",
-    "cordova-paramedic": "npm:cordova-paramedic-hotfix@2.0.0-hotfix.1",
+    "cordova-paramedic": "npm:cordova-paramedic-hotfix@2.0.0-hotfix.2",
     "typescript": "~7.0.2"
   },
   "bugs": {
