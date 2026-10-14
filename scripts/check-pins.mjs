@@ -91,7 +91,9 @@ export function assess(sdk, pinned, latest) {
     major: behind && Number(latest.split('.')[0]) > Number(pinned.split('.')[0]),
     line: `${sdk.name}: pinned ${pinned}, latest ${latest}${behind ? ' (behind)' : ''}`,
     title: `Take ${sdk.name} ${latest}`,
-    branch: `pins/${sdk.name}-${latest}`,
+    // A flat name: git refuses every branch beneath one that exists, and this repository has a branch called `pins` (an earlier pull
+    // request's), so `pins/sentry-android-8.61.0` was rejected at the push.
+    branch: `pin-${sdk.name}-${latest}`,
   };
 }
 
@@ -179,7 +181,7 @@ export function decide(result, pulls) {
 
 /** The open pull requests of this script for an older release of the same SDK: they are replaced by the new one. */
 export function superseded(result, pulls) {
-  return pulls.filter((pull) => pull.state === 'OPEN' && pull.headRefName.startsWith(`pins/${result.sdk}-`) && pull.headRefName !== result.branch);
+  return pulls.filter((pull) => pull.state === 'OPEN' && pull.headRefName.startsWith(`pin-${result.sdk}-`) && pull.headRefName !== result.branch);
 }
 
 /**
