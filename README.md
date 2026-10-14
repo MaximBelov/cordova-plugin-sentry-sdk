@@ -158,6 +158,7 @@ npm test                      # the JavaScript on Node: the API, the parity of t
 npm run test:ios              # the Swift against cordova-ios and sentry-cocoa, XCTest on a simulator (test/ios)
 npm run test:android          # the Kotlin against cordova-android and sentry-android, JVM with Robolectric (test/android)
 npm run test:e2e:android:build && npm run test:e2e:android   # the demo app crashes itself on a device or an emulator and its report is read (test/e2e)
+npm run test:e2e:ios:build && npm run test:e2e:ios           # the same on an iOS simulator
 npm run test:paramedic:ios:simulator      # tests/ in an app on a simulator (cordova-paramedic)
 npm run test:paramedic:android:emulator   # the same on an emulator (ANDROID_AVD=<name>)
 ```

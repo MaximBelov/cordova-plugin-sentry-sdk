@@ -1,6 +1,6 @@
 name: iOS tests
-# The Swift and the device tests on an iOS simulator: no phone, and no system prompt to answer. The two jobs are independent and run
-# side by side. Called by ci.yaml when something they cover changes, and for every push to main.
+# The Swift, the device tests and the demo app that crashes itself, all on an iOS simulator: no phone, and no system prompt to answer.
+# The jobs are independent and run side by side. Called by ci.yaml when something they cover changes, and for every push to main.
 on:
   workflow_call:
 # macos-26, not macos-15: the default Xcode on macos-15 is 16.4 (Swift 6.1), and SwiftPM 6.1 refuses sentry-cocoa 9.x pinned by
@@ -51,5 +51,28 @@ jobs:
         if: always()
         run: |
           pkill -f '[c]ordova-paramedic' || true
+          pkill -f '[x]codebuild' || true
+          xcrun simctl shutdown all || true
+  # The plugin's whole path on iOS: the demo app, with the plugin installed the way an app installs it, runs on a simulator, sets a user
+  # and a context, starts the SDK against a DSN that points at an ingest endpoint on this runner, sets tags and crashes; the next launch
+  # sends the report, and the test reads it. A simulator shares the runner's network, so nothing has to be forwarded. No Sentry account
+  # and no secret, so it runs for every pull request, a fork's and Dependabot's too.
+  e2e:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+      - run: npm ci
+      # One name for the run, in the build and in the test: the demo reports it as its release.
+      - name: Build the demo app for a simulator
+        run: npm run test:e2e:ios:build -- --run ${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Crash it and read what it sends
+        run: npm run test:e2e:ios -- --run ${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Stop what the test left running
+        if: always()
+        run: |
           pkill -f '[x]codebuild' || true
           xcrun simctl shutdown all || true

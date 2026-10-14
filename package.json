@@ -43,6 +43,8 @@
     "test:android:coverage": "cd test/android && ./gradlew createDebugUnitTestCoverageReport && cd ../.. && node test/coverage/summarize.mjs android",
     "test:e2e:android:build": "node test/e2e/android.mjs build",
     "test:e2e:android": "node test/e2e/android.mjs run",
+    "test:e2e:ios:build": "node test/e2e/ios.mjs build",
+    "test:e2e:ios": "node test/e2e/ios.mjs run",
     "test:paramedic:ios:simulator": "cordova-paramedic --platform ios --plugin . --target=$(node test/ios/simulator.mjs --paramedic)",
     "test:paramedic:ios:device": "cordova-paramedic --platform ios --plugin . --device --target=$IOS_UDID --appId io.github.maximbelov.sentry.paramedic --args=--buildConfig=$PWD/demo/build.local.json",
     "test:paramedic:android": "cordova-paramedic --platform android --plugin . --device --target=$ANDROID_SERIAL",
