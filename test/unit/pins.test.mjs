@@ -9,17 +9,41 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { SDKS, assess, bump, compareVersions, decide, describePullRequest, propose, readPin, superseded, versionOf } from '../../scripts/check-pins.mjs';
+import { SDKS, assess, bump, commitMessage, compareVersions, decide, describePullRequest, propose, readPin, superseded, versionOf } from '../../scripts/check-pins.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const real = (file) => readFileSync(join(root, file), 'utf8');
 const [cocoa, android] = SDKS;
 
-/** Files in memory that fall back to this repository's own, and remember what was written. */
-function tree(entries = {}) {
-  const written = new Map(Object.entries(entries));
+/** This repository's own files, with what was written kept apart: for the tests that say they are about the files of this repository. */
+function tree() {
+  const written = new Map();
   return { read: (file) => written.get(file) ?? real(file), write: (file, text) => written.set(file, text), written };
 }
+
+/** Files in memory and nothing else: a file the test did not give is an error, so no test passes or fails on what the pin is today. */
+function memory(entries) {
+  const written = new Map(Object.entries(entries));
+  return {
+    read: (file) => {
+      if (!written.has(file)) {
+        throw new Error(`the test gave no ${file}`);
+      }
+      return written.get(file);
+    },
+    write: (file, text) => written.set(file, text),
+    written,
+  };
+}
+
+/** The four files a sentry-android bump reads, all at 8.60.0. */
+const androidFiles = (overrides = {}) => ({
+  'plugin.xml': '<preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />\n',
+  'test/android/plugin/build.gradle': "    implementation 'io.sentry:sentry-android-core:8.60.0'\n",
+  'README.md': '| Android | sentry-android 8.60.0 | from Maven |\n',
+  'CHANGES.txt': '= next =\n',
+  ...overrides,
+});
 
 /** Whether a line carries a version as a whole version: 8.60.0 is in "at 8.60.0." and is not in 18.60.0, 8.60.01 or 8.60.0.1. */
 const carries = (line, version) => new RegExp(`(?<![0-9])(?<![0-9]\\.)${version.replaceAll('.', '\\.')}(?![0-9])(?!\\.[0-9])`).test(line);
@@ -93,7 +117,7 @@ for (const sdk of SDKS) {
 }
 
 test('a bump changes the README only on lines that name the SDK, and only where the version stands alone', () => {
-  const files = tree({
+  const files = memory({
     'plugin.xml': '<preference name="SENTRY_ANDROID_SDK_VERSION" default="8.60.0" />\n',
     'test/android/plugin/build.gradle': "    implementation 'io.sentry:sentry-android-core:8.60.0'\n",
     'README.md': [
@@ -119,20 +143,23 @@ test('a bump changes the README only on lines that name the SDK, and only where 
   assert.equal(files.written.get('CHANGES.txt'), '= next =\nAndroid: sentry-android 8.61.0 (it was 8.60.0)\nsomething\n\n= 0.1.2 =\nAndroid: sentry-android 8.60.0 by default\n');
   assert.match(files.written.get('test/android/plugin/build.gradle'), /sentry-android-core:8\.61\.0'/);
 
-  const umbrella = tree({ 'test/android/plugin/build.gradle': "implementation 'io.sentry:sentry-android:8.60.0'" });
+  const umbrella = memory(androidFiles({ 'test/android/plugin/build.gradle': "implementation 'io.sentry:sentry-android:8.60.0'" }));
   bump(android, '8.60.0', '8.61.0', umbrella);
   assert.equal(umbrella.written.get('test/android/plugin/build.gradle'), "implementation 'io.sentry:sentry-android:8.61.0'");
 });
 
 test('a bump that would change nothing, or what disagrees with the pin, is an error and not a bump that did nothing', () => {
-  const missing = tree({ 'test/android/plugin/build.gradle': 'dependencies {}' });
-  assert.throws(() => bump(android, readPin(android), '99.1.0', missing), /build\.gradle did not change/);
+  const missing = memory(androidFiles({ 'test/android/plugin/build.gradle': 'dependencies {}' }));
+  assert.throws(() => bump(android, '8.60.0', '8.61.0', missing), /build\.gradle did not change/);
 
-  const apart = tree({ 'test/android/plugin/build.gradle': "implementation 'io.sentry:sentry-android-core:8.59.0'" });
-  assert.throws(() => bump(android, readPin(android), '99.1.0', apart), /pins 8\.59\.0, not/);
+  const apart = memory(androidFiles({ 'test/android/plugin/build.gradle': "implementation 'io.sentry:sentry-android-core:8.59.0'" }));
+  assert.throws(() => bump(android, '8.60.0', '8.61.0', apart), /pins 8\.59\.0, not 8\.60\.0/);
+});
 
-  const noSection = tree({ 'CHANGES.txt': '= 0.1.2 =\nsomething\n' });
-  assert.throws(() => bump(android, readPin(android), '99.1.0', noSection), /CHANGES\.txt did not change: it has no "= next =" section/);
+test('after a release there is no "= next =" in CHANGES until a change makes it, and a bump makes it', () => {
+  const released = memory(androidFiles({ 'CHANGES.txt': '= 0.2.0 =\nsomething\n\n= 0.1.2 =\nolder\n' }));
+  bump(android, '8.60.0', '8.61.0', released);
+  assert.equal(released.written.get('CHANGES.txt'), '= next =\nAndroid: sentry-android 8.61.0 (it was 8.60.0)\n\n= 0.2.0 =\nsomething\n\n= 0.1.2 =\nolder\n');
 });
 
 const pull = (number, title, state, headRefName) => ({ number, title, state, headRefName });
@@ -165,15 +192,17 @@ test('an open pull request of this script for an older release of the same SDK i
   assert.deepEqual(superseded(result, [older, ...others]), [older]);
 });
 
-test('a pull request says which files it moves and, for a major release, that it can break the build', () => {
-  const minor = describePullRequest(cocoa, assess(cocoa, '9.30.1', '9.30.2'), ['Package.swift', 'CHANGES.txt']);
-  assert.match(minor.body, /sentry-cocoa 9\.30\.2 is out, and this plugin pinned 9\.30\.1: https:\/\/github\.com\/getsentry\/sentry-cocoa\/releases\/tag\/9\.30\.2/);
-  assert.match(minor.body, /Package\.swift, CHANGES\.txt/);
-  assert.match(minor.body, /workflow_dispatch of ci\.yaml/);
-  assert.doesNotMatch(minor.body, /major release/);
-  assert.equal(minor.commit, 'Release notes: https://github.com/getsentry/sentry-cocoa/releases/tag/9.30.2');
+test('a pull request says which files it moves, links the CI run, and for a major release says that it can break the build', () => {
+  const run = 'https://github.com/MaximBelov/cordova-plugin-sentry-sdk/actions/runs/777';
+  const minor = describePullRequest(cocoa, assess(cocoa, '9.30.1', '9.30.2'), ['Package.swift', 'CHANGES.txt'], run);
+  assert.match(minor, /sentry-cocoa 9\.30\.2 is out, and this plugin pinned 9\.30\.1: https:\/\/github\.com\/getsentry\/sentry-cocoa\/releases\/tag\/9\.30\.2/);
+  assert.match(minor, /Package\.swift, CHANGES\.txt/);
+  assert.match(minor, /workflow_dispatch of ci\.yaml that tests everything and never publishes: https:\/\/github\.com\/MaximBelov\/cordova-plugin-sentry-sdk\/actions\/runs\/777\./);
+  assert.doesNotMatch(minor, /major release/);
+  assert.equal(commitMessage(cocoa, assess(cocoa, '9.30.1', '9.30.2')), 'Release notes: https://github.com/getsentry/sentry-cocoa/releases/tag/9.30.2');
 
-  assert.match(describePullRequest(cocoa, assess(cocoa, '9.30.2', '10.0.0'), ['Package.swift']).body, /This is a major release/);
+  assert.match(describePullRequest(cocoa, assess(cocoa, '9.30.2', '10.0.0'), ['Package.swift'], run), /This is a major release/);
+  assert.match(describePullRequest(cocoa, assess(cocoa, '9.30.1', '9.30.2'), ['Package.swift'], undefined), /look for it under Actions, on this branch/, 'with no link to give, it says where to look');
 });
 
 /** Runs `propose` against the files of this repository with commands that are only written down. */
@@ -186,7 +215,10 @@ function run(entries, pulls = []) {
   };
   const act = (command, args) => {
     calls.push([command, ...args]);
-    return command === 'gh' && args[1] === 'create' ? 'https://github.com/MaximBelov/cordova-plugin-sentry-sdk/pull/21\n' : '';
+    if (command === 'gh' && args[1] === 'create') {
+      return 'https://github.com/MaximBelov/cordova-plugin-sentry-sdk/pull/21\n';
+    }
+    return command === 'gh' && args[0] === 'workflow' ? 'https://github.com/MaximBelov/cordova-plugin-sentry-sdk/actions/runs/777\n' : '';
   };
   propose(entries, { exec, act, files, head: 'abc123' });
   return { calls, files };
@@ -204,28 +236,29 @@ test('propose opens one pull request per SDK that is behind, from the commit it 
     'git add --',
     'git commit --message',
     'git push --set-upstream',
-    'gh pr create',
     'gh workflow run',
+    'gh pr create',
     'git switch --detach',
     'git switch --create',
     'git add --',
     'git commit --message',
     'git push --set-upstream',
-    'gh pr create',
     'gh workflow run',
+    'gh pr create',
     'git switch --detach',
   ]);
   assert.deepEqual(calls[0], ['git', 'switch', '--create', 'pin-sentry-cocoa-99.0.0']);
   assert.deepEqual(calls[1], ['git', 'add', '--', 'Package.swift', 'test/ios/Package.swift', 'README.md', 'CHANGES.txt']);
   assert.equal(calls[2].at(-3), 'Take sentry-cocoa 99.0.0');
   assert.deepEqual(calls[3], ['git', 'push', '--set-upstream', 'origin', 'pin-sentry-cocoa-99.0.0']);
-  assert.deepEqual(calls[4].slice(0, 9), ['gh', 'pr', 'create', '--base', 'main', '--head', 'pin-sentry-cocoa-99.0.0', '--title', 'Take sentry-cocoa 99.0.0']);
-  assert.match(calls[4].at(-1), /This is a major release/);
-  assert.deepEqual(calls[5], ['gh', 'workflow', 'run', 'ci.yaml', '--ref', 'pin-sentry-cocoa-99.0.0']);
+  assert.deepEqual(calls[4], ['gh', 'workflow', 'run', 'ci.yaml', '--ref', 'pin-sentry-cocoa-99.0.0']);
+  assert.deepEqual(calls[5].slice(0, 9), ['gh', 'pr', 'create', '--base', 'main', '--head', 'pin-sentry-cocoa-99.0.0', '--title', 'Take sentry-cocoa 99.0.0']);
+  assert.match(calls[5].at(-1), /This is a major release/);
+  assert.match(calls[5].at(-1), /actions\/runs\/777/, 'the pull request links the run that was started');
   assert.deepEqual(calls[6], ['git', 'switch', '--detach', 'abc123']);
   assert.deepEqual(calls[7], ['git', 'switch', '--create', 'pin-sentry-android-8.99.0']);
-  assert.match(calls[11].at(-1), /sentry-android 8\.99\.0 is out/);
-  assert.doesNotMatch(calls[11].at(-1), /major release/, 'a minor release is not called a major');
+  assert.match(calls[12].at(-1), /sentry-android 8\.99\.0 is out/);
+  assert.doesNotMatch(calls[12].at(-1), /major release/, 'a minor release is not called a major');
 });
 
 test('propose commits as the Actions bot, so the pull request is not taken for the work of whoever merges it', () => {
@@ -276,7 +309,7 @@ test('the git commands work against a real remote: a branch of its own, a commit
         return execFileSync('git', args, { cwd: clone, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       }
       elsewhere.push([command, ...args]);
-      return '';
+      return command === 'gh' && args[0] === 'workflow' ? 'https://github.com/o/r/actions/runs/1\n' : '';
     };
     const inClone = { read: (file) => readFileSync(join(clone, file), 'utf8'), write: (file, text) => writeFileSync(join(clone, file), text) };
     propose([{ sdk: android, result: assess(android, readPin(android), '8.99.0') }], { exec: () => '[]', act, files: inClone, head });
@@ -288,7 +321,7 @@ test('the git commands work against a real remote: a branch of its own, a commit
     assert.deepEqual(git(remote, 'diff', '--name-only', head, branch).split('\n'), ['CHANGES.txt', 'README.md', 'plugin.xml', 'test/android/plugin/build.gradle']);
     assert.equal(git(clone, 'rev-parse', 'HEAD'), head, 'back where it started');
     assert.equal(git(clone, 'status', '--porcelain'), '', 'and nothing left behind');
-    assert.deepEqual(elsewhere.map((call) => call.slice(0, 3).join(' ')), ['gh pr create', 'gh workflow run']);
+    assert.deepEqual(elsewhere.map((call) => call.slice(0, 3).join(' ')), ['gh workflow run', 'gh pr create']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
