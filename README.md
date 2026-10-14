@@ -25,7 +25,7 @@ plugin built that way moves with every such change. This one calls only the publ
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
 | iOS | sentry-cocoa 9.30.2 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
-| Android | sentry-android 8.60.0 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
+| Android | sentry-android 8.61.0 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
 
 What the minimums rest on:
 
@@ -65,7 +65,7 @@ Variables, set with `cordova plugin add cordova-plugin-sentry-sdk --variable NAM
 
 | Variable | Default | |
 | --- | --- | --- |
-| `SENTRY_ANDROID_SDK_VERSION` | `8.60.0` | the sentry-android release |
+| `SENTRY_ANDROID_SDK_VERSION` | `8.61.0` | the sentry-android release |
 | `SENTRY_ANDROID_ARTIFACT` | `sentry-android-core` | `sentry-android-core` is the SDK: Java and Kotlin crashes, ANRs, and what this plugin calls. `sentry-android` adds the NDK module, which reports crashes in native C and C++ code from any library in the app, and Session Replay, which the plugin never turns on. It puts native libraries for every ABI into the APK, so take it when the app carries native code whose crashes you want. |
 
 The iOS version is pinned in `Package.swift`.
@@ -269,7 +269,7 @@ build that is minified (R8 or ProGuard). This plugin uploads nothing.
 
 - sentry-cocoa is pinned exactly in `Package.swift`, and an app cannot override it: a fix in the SDK
   reaches your app through a release of this plugin.
-- sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.60.0 by default) and
+- sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.61.0 by default) and
   `SENTRY_ANDROID_ARTIFACT`, and an app can install the plugin with others.
 - `test/unit/platform-parity.test.mjs` holds the pins of `plugin.xml`, `Package.swift`, `test/ios`
   and `test/android` together, and a weekly workflow opens a pull request that moves a pin when its SDK has a newer release, a major one too.
