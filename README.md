@@ -117,6 +117,8 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.setUser](#setUser)
 - [SentrySdk.setTags](#setTags)
 - [SentrySdk.setContext](#setContext)
+- [SentrySdk.addBreadcrumb](#addBreadcrumb)
+- [SentrySdk.clearBreadcrumbs](#clearBreadcrumbs)
 - [SentrySdk.crash](#crash)
 
 ## start
@@ -173,7 +175,9 @@ A scope call made while the SDK is not running would change a scope that the SDK
 starts. So the plugin keeps it instead, answers `queued`, and `start` applies it: the **last**
 change of each key (the user, each tag, each context), in no particular order between keys. The
 order of the calls does not matter, which is what an app needs when the user is known before the
-SDK is up. Nothing is kept for an SDK that never starts.
+SDK is up. Nothing is kept for an SDK that never starts. Breadcrumbs are a trail and not a key, so
+they are kept in the order they came, the last hundred, and [`clearBreadcrumbs`](#clearBreadcrumbs)
+drops them.
 
 ### What is refused
 
@@ -182,6 +186,32 @@ The wrapper settles what the two platforms would otherwise read differently, so 
 that is not an object or `null` is refused too. `setTags` takes an object whose values are strings, finite numbers, booleans or
 `null`, and `setContext` takes a key that is not empty and an object or `null`: an array, a string or no value is refused, where
 native used to take it as a removal. The promise rejects with the reason, a string that names the call, and nothing is sent.
+
+## addBreadcrumb
+
+`addBreadcrumb(breadcrumb): Promise<'added' | 'queued'>`
+
+Adds a breadcrumb to the native scope, so a native crash carries what the page did before it: a route,
+a tap, a request. `breadcrumb` is the JavaScript SDK's, and what is read is `type`, `category`,
+`message`, `level`, `timestamp` (seconds since the epoch, as there; unset, the time of the call) and
+`data` (any JSON, nested). Answers `added`, or `queued` while the SDK is not running: see
+[Before `start`](#before-start).
+
+The levels are the JavaScript SDK's, and `log` and `critical`, which native does not have, are sent as
+`debug` and `fatal`. No level is `info`, on both platforms. Like the rest, a breadcrumb that the two
+platforms would read differently is refused before it is sent: a field that is not text, a level that
+is none of the above, a `timestamp` that is not a number, `data` that is not an object or that JSON
+cannot carry. On iOS a breadcrumb without a `category` has an empty one, which the SDK requires.
+
+The native SDKs add breadcrumbs of their own (lifecycle, system events, network on iOS). The page's
+are not forwarded by themselves: either call this for the ones that matter, or bind the page SDK's
+scope to the plugin, which does it for every breadcrumb.
+
+## clearBreadcrumbs
+
+`clearBreadcrumbs(): Promise<'cleared'>`
+
+Clears the native scope's breadcrumbs, and the ones kept for `start`.
 
 ## crash
 
@@ -198,9 +228,10 @@ from ending the app. It is not a lock against a script that can call `start` its
 ## What arrives, and what does not
 
 Native events carry the native SDK's own device and OS contexts plus whatever you set through this
-plugin. They are separate from the page's events: no shared trace, no shared breadcrumbs. If that
-matters to you, you want a hybrid SDK such as
-[sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this plugin.
+plugin. They are separate from the page's events: no shared trace, and the page's breadcrumbs only
+when it forwards them ([`addBreadcrumb`](#addBreadcrumb)). If a shared trace matters to you, you
+want a hybrid SDK such as [sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this
+plugin.
 
 What reaches Sentry through this plugin is what the two SDKs catch in native code: a crash, and on
 iOS a watchdog termination, an app hang (the deprecated option) and, with `enableMetricKit`, the

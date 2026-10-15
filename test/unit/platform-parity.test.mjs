@@ -18,7 +18,10 @@ const actionOf = Object.fromEntries(
 const methods = Object.keys(actionOf);
 
 const iosActions = new Set([...read('src/ios/SentrySdk.swift').matchAll(/^\s*@objc\((\w+):\)/gm)].map((m) => m[1]));
-const androidActions = new Set([...read('src/android/SentrySdk.kt').matchAll(/^\s*"(\w+)" -> /gm)].map((m) => m[1]));
+// Only the dispatch in `execute`: other `when` blocks of the class map text to values (a breadcrumb's level) the same way.
+const kotlin = read('src/android/SentrySdk.kt');
+const dispatch = kotlin.slice(kotlin.indexOf('override fun execute('), kotlin.indexOf('else -> return false'));
+const androidActions = new Set([...dispatch.matchAll(/^\s*"(\w+)" -> /gm)].map((m) => m[1]));
 
 test('the JavaScript sends an action per export, and both platforms handle exactly those', () => {
   assert.ok(methods.length >= 5, 'the exports were found');

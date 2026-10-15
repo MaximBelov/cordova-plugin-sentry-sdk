@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.crash = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
+exports.crash = exports.clearBreadcrumbs = exports.addBreadcrumb = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
 const SERVICE = 'SentrySdk';
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
@@ -57,6 +57,58 @@ const checkContext = (key, value) => {
     }
     return [key, value];
 };
+const BREADCRUMB_TEXT_FIELDS = ['type', 'category', 'message'];
+const BREADCRUMB_LEVELS = {
+    fatal: 'fatal',
+    critical: 'fatal',
+    error: 'error',
+    warning: 'warning',
+    log: 'debug',
+    info: 'info',
+    debug: 'debug',
+};
+// The levels `log` and `critical` do not exist natively, so they are mapped here, once, for both platforms. Data is sent as the JSON it
+// is, so a value JSON cannot carry (a cycle, a BigInt) is refused here and not dropped by one platform and kept by the other.
+const checkBreadcrumb = (breadcrumb) => {
+    if (typeof breadcrumb !== 'object' || breadcrumb === null || Array.isArray(breadcrumb)) {
+        return refuse('addBreadcrumb needs an object');
+    }
+    const checked = {};
+    for (const field of BREADCRUMB_TEXT_FIELDS) {
+        const value = breadcrumb[field];
+        if (value === undefined || value === null) {
+            continue;
+        }
+        if (typeof value !== 'string') {
+            return refuse(`addBreadcrumb: ${field} has to be a string`);
+        }
+        checked[field] = value;
+    }
+    if (breadcrumb.level !== undefined && breadcrumb.level !== null) {
+        if (typeof breadcrumb.level !== 'string' || !Object.prototype.hasOwnProperty.call(BREADCRUMB_LEVELS, breadcrumb.level)) {
+            return refuse(`addBreadcrumb: level has to be one of ${Object.keys(BREADCRUMB_LEVELS).join(', ')}`);
+        }
+        checked.level = BREADCRUMB_LEVELS[breadcrumb.level];
+    }
+    if (breadcrumb.timestamp !== undefined && breadcrumb.timestamp !== null) {
+        if (typeof breadcrumb.timestamp !== 'number' || !Number.isFinite(breadcrumb.timestamp)) {
+            return refuse('addBreadcrumb: timestamp has to be a number of seconds');
+        }
+        checked.timestamp = breadcrumb.timestamp;
+    }
+    if (breadcrumb.data !== undefined && breadcrumb.data !== null) {
+        if (typeof breadcrumb.data !== 'object' || Array.isArray(breadcrumb.data)) {
+            return refuse('addBreadcrumb: data has to be an object');
+        }
+        try {
+            checked.data = JSON.parse(JSON.stringify(breadcrumb.data));
+        }
+        catch (_a) {
+            return refuse('addBreadcrumb: data cannot be sent as JSON');
+        }
+    }
+    return checked;
+};
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 const start = (options) => call('start', options);
 exports.start = start;
@@ -69,6 +121,15 @@ exports.setTags = setTags;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 const setContext = async (key, value) => call('setContext', ...checkContext(key, value));
 exports.setContext = setContext;
+/**
+ * Adds a breadcrumb to the native scope, so a native crash carries what the page did before it. While the SDK is not running it is
+ * kept, in order and up to the last hundred, and `start` adds them.
+ */
+const addBreadcrumb = async (breadcrumb) => call('addBreadcrumb', checkBreadcrumb(breadcrumb));
+exports.addBreadcrumb = addBreadcrumb;
+/** Clears the native scope's breadcrumbs, and the ones kept for `start`. */
+const clearBreadcrumbs = () => call('clearBreadcrumbs');
+exports.clearBreadcrumbs = clearBreadcrumbs;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;
