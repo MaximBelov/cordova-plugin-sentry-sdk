@@ -5,6 +5,7 @@ import io.sentry.android.core.SentryAndroid
 import io.sentry.protocol.User
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaPlugin
+import org.apache.cordova.PluginResult
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -31,6 +32,9 @@ class SentrySdk : CordovaPlugin() {
             "setUser" -> setUser(args.optJSONObject(0), callbackContext)
             "setTags" -> setTags(args.optJSONObject(0), callbackContext)
             "setContext" -> setContext(args.optString(0), args.optJSONObject(1), callbackContext)
+            "setExtras" -> setExtras(args.optJSONObject(0), callbackContext)
+            "close" -> close(callbackContext)
+            "isEnabled" -> isEnabled(callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -127,6 +131,41 @@ class SentrySdk : CordovaPlugin() {
             }
         }
         callbackContext.success(if (applied) "set" else "queued")
+    }
+
+    /** The wrapper has made every value text, or null for a removal. */
+    private fun setExtras(extras: JSONObject?, callbackContext: CallbackContext) {
+        if (extras == null) {
+            callbackContext.error("setExtras needs an object")
+            return
+        }
+        var applied = true
+        for (key in extras.keys()) {
+            val value = if (extras.isNull(key)) null else extras.getString(key)
+            applied = applyOrKeep("extra:$key") { if (value == null) Sentry.removeExtra(key) else Sentry.setExtra(key, value) } && applied
+        }
+        callbackContext.success(if (applied) "set" else "queued")
+    }
+
+    /**
+     * `Sentry.close` flushes, which can take as long as the SDK's shutdown timeout, so it does not run on the thread Cordova called
+     * the plugin on. What the page set while the SDK was down stays kept for the next `start`, and `allowCrash` does not: it was the
+     * word of the `start` that is over.
+     */
+    private fun close(callbackContext: CallbackContext) {
+        cordova.threadPool.execute {
+            if (!Sentry.isEnabled()) {
+                callbackContext.success("not running")
+                return@execute
+            }
+            Sentry.close()
+            crashAllowed = false
+            callbackContext.success("closed")
+        }
+    }
+
+    private fun isEnabled(callbackContext: CallbackContext) {
+        callbackContext.sendPluginResult(PluginResult(PluginResult.Status.OK, Sentry.isEnabled()))
     }
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */

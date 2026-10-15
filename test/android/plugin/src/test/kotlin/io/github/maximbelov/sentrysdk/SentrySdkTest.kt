@@ -21,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.timeout
 import org.mockito.Mockito.verify
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -67,7 +68,8 @@ class SentrySdkTest {
         args.forEach { json.put(it ?: JSONObject.NULL) }
         assertTrue("the action is known: $action", target.execute(action, json, callback))
         val sent = ArgumentCaptor.forClass(PluginResult::class.java)
-        verify(webView).sendPluginResult(sent.capture(), org.mockito.ArgumentMatchers.eq(id))
+        // `close` answers from a thread of Cordova's pool, so the answer is waited for; the others have answered by now.
+        verify(webView, timeout(10_000)).sendPluginResult(sent.capture(), org.mockito.ArgumentMatchers.eq(id))
         return sent.value
     }
 
@@ -248,6 +250,88 @@ class SentrySdkTest {
     fun `setContext without a key is refused`() {
         val result = run("setContext", "", json("x" to 1))
         assertEquals(PluginResult.Status.ERROR.ordinal, result.status)
+    }
+
+    private fun extras(): Map<String, String> {
+        var seen: Map<String, Any?> = emptyMap()
+        Sentry.configureScope { seen = it.extras }
+        return seen.mapValues { it.value as String }
+    }
+
+    @Test
+    fun `setExtras puts each extra on the scope as text, and null removes one`() {
+        run("start", json("dsn" to DSN))
+        run("setExtras", json("gone" to "soon"))
+        assertEquals("set", run("setExtras", json("plain" to "text", "count" to "12", "json" to "{\"a\":[1]}", "gone" to null)).strMessage)
+        val seen = extras()
+        assertEquals("text", seen["plain"])
+        assertEquals("12", seen["count"])
+        assertEquals("{\"a\":[1]}", seen["json"])
+        assertFalse(seen.containsKey("gone"))
+    }
+
+    @Test
+    fun `extras set before start are kept, answered queued, and start applies the last change of each key`() {
+        assertEquals("queued", run("setExtras", json("a" to "1", "gone" to "soon")).strMessage)
+        assertEquals("queued", run("setExtras", json("a" to "2", "gone" to null, "b" to "3")).strMessage)
+        assertFalse("nothing started the SDK", Sentry.isEnabled())
+
+        // every key is its own change: the order the keys come in must not decide which of them survive
+        run("start", json("dsn" to DSN))
+        assertEquals(mapOf("a" to "2", "b" to "3"), extras())
+    }
+
+    @Test
+    fun `setExtras without an object is refused`() {
+        val result = run("setExtras", null)
+        assertEquals(PluginResult.Status.ERROR.ordinal, result.status)
+        assertTrue(result.message.contains("setExtras"))
+    }
+
+    @Test
+    fun `isEnabled says whether the SDK is running, whoever started it`() {
+        val before = run("isEnabled")
+        assertEquals(PluginResult.Status.OK.ordinal, before.status)
+        assertEquals(PluginResult.MESSAGE_TYPE_BOOLEAN, before.messageType)
+        assertEquals("false", before.message)
+
+        run("start", json("dsn" to DSN))
+        assertEquals("true", run("isEnabled").message)
+
+        Sentry.close()
+        assertEquals("false", run("isEnabled").message)
+        SentryAndroid.init(activity) { it.dsn = DSN }
+        assertEquals("an SDK the app started counts", "true", run("isEnabled").message)
+    }
+
+    @Test
+    fun `close stops the SDK and says so, says not running when there was none, and a start after it starts it again`() {
+        assertEquals("not running", run("close").strMessage)
+
+        run("start", json("dsn" to DSN))
+        assertTrue(Sentry.isEnabled())
+        assertEquals("closed", run("close").strMessage)
+        assertFalse(Sentry.isEnabled())
+        assertEquals("not running", run("close").strMessage)
+
+        assertEquals("started", run("start", json("dsn" to DSN)).strMessage)
+        assertTrue(Sentry.isEnabled())
+    }
+
+    @Test
+    fun `close takes the allowCrash of the start that is over, and what the page sets while the SDK is down is kept for the next start`() {
+        run("start", json("dsn" to DSN, "allowCrash" to true))
+        run("close")
+        assertEquals("a closed SDK has no crash to allow", PluginResult.Status.ERROR.ordinal, run("crash").status)
+
+        assertEquals("queued", run("setTags", json("while" to "down")).strMessage)
+        assertEquals("queued", run("setExtras", json("x" to "1")).strMessage)
+        run("start", json("dsn" to DSN))
+        var tags: Map<String, String> = emptyMap()
+        Sentry.configureScope { tags = it.tags }
+        assertEquals("down", tags["while"])
+        assertEquals(mapOf("x" to "1"), extras())
+        assertEquals("the new start did not allow it either", PluginResult.Status.ERROR.ordinal, run("crash").status)
     }
 
     @Test

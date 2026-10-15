@@ -54,6 +54,9 @@ final class SentrySdkTests: XCTestCase {
         case "setUser": target.setUser(command)
         case "setTags": target.setTags(command)
         case "setContext": target.setContext(command)
+        case "setExtras": target.setExtras(command)
+        case "close": target.close(command)
+        case "isEnabled": target.isEnabled(command)
         case "crash": target.crash(command)
         default: XCTFail("no such method: \(method)")
         }
@@ -237,6 +240,76 @@ final class SentrySdkTests: XCTestCase {
 
     func testSetContextWithoutAKeyIsRefused() {
         XCTAssertEqual(status(run("setContext", ["", ["x": 1]])), CDVCommandStatus_ERROR)
+    }
+
+    private func extras() -> [String: String] {
+        (scope().serialize()["extra"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String }
+    }
+
+    func testSetExtrasPutsEachExtraOnTheScopeAsTextAndNullRemovesOne() {
+        run("start", [["dsn": Self.dsn]])
+        run("setExtras", [["gone": "soon"]])
+        XCTAssertEqual(run("setExtras", [["plain": "text", "count": "12", "json": "{\"a\":[1]}", "gone": NSNull()]]).message as? String, "set")
+        let seen = extras()
+        XCTAssertEqual(seen["plain"], "text")
+        XCTAssertEqual(seen["count"], "12")
+        XCTAssertEqual(seen["json"], "{\"a\":[1]}")
+        XCTAssertNil(seen["gone"])
+    }
+
+    func testExtrasSetBeforeStartAreKeptAnsweredQueuedAndStartAppliesTheLastChangeOfEachKey() {
+        XCTAssertEqual(run("setExtras", [["a": "1", "gone": "soon"]]).message as? String, "queued")
+        XCTAssertEqual(run("setExtras", [["a": "2", "gone": NSNull(), "b": "3"]]).message as? String, "queued")
+        XCTAssertFalse(SentrySDK.isEnabled, "nothing started the SDK")
+
+        // every key is its own change: the order a dictionary gives its keys in must not decide which of them survive
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(extras(), ["a": "2", "b": "3"])
+    }
+
+    func testSetExtrasWithoutAnObjectIsRefused() {
+        let result = run("setExtras", [NSNull()])
+        XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+        XCTAssertTrue((result.message as? String ?? "").contains("setExtras"))
+    }
+
+    func testIsEnabledSaysWhetherTheSdkIsRunningWhoeverStartedIt() {
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, false)
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, true)
+        SentrySDK.close()
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, false)
+        SentrySDK.start { $0.dsn = Self.dsn }
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, true, "an SDK the app started counts")
+    }
+
+    func testCloseStopsTheSdkAndSaysSoSaysNotRunningWhenThereWasNoneAndAStartAfterItStartsItAgain() {
+        XCTAssertEqual(run("close", []).message as? String, "not running")
+
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertTrue(SentrySDK.isEnabled)
+        XCTAssertEqual(run("close", []).message as? String, "closed")
+        XCTAssertFalse(SentrySDK.isEnabled)
+        XCTAssertEqual(run("close", []).message as? String, "not running")
+
+        XCTAssertEqual(run("start", [["dsn": Self.dsn]]).message as? String, "started")
+        XCTAssertTrue(SentrySDK.isEnabled)
+    }
+
+    func testCloseTakesTheAllowCrashOfTheStartThatIsOverAndWhatThePageSetsWhileTheSdkIsDownIsKeptForTheNextStart() {
+        var crashes = 0
+        plugin.crashAction = { crashes += 1 }
+        run("start", [["dsn": Self.dsn, "allowCrash": true]])
+        run("close", [])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "a closed SDK has no crash to allow")
+
+        XCTAssertEqual(run("setTags", [["while": "down"]]).message as? String, "queued")
+        XCTAssertEqual(run("setExtras", [["x": "1"]]).message as? String, "queued")
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(scope().tags["while"], "down")
+        XCTAssertEqual(extras(), ["x": "1"])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "the new start did not allow it either")
+        XCTAssertEqual(crashes, 0, "nothing crashed")
     }
 
     /// The crash itself takes the process down, so it never answers: this calls it the way Cordova does and says whether it went ahead.

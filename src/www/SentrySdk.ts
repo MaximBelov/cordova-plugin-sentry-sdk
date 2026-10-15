@@ -69,8 +69,11 @@ export type SentrySdkStartAnswer = 'started' | 'already started';
 /** What `setUser` answers: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 
-/** What `setTags` and `setContext` answer: `queued` while the SDK is not running, and `start` applies it. */
+/** What `setTags`, `setContext` and `setExtras` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
+
+/** What `close` answers: `closed`, or `not running` when there was no SDK to close. */
+export type SentrySdkCloseAnswer = 'closed' | 'not running';
 
 const call = <T>(action: string, ...args: unknown[]) =>
   new Promise<T>((resolve, reject) => cordova.exec((r) => resolve(r as T), reject, SERVICE, action, args));
@@ -132,6 +135,35 @@ const checkContext = (key: string, value: Record<string, unknown> | null): [stri
   return [key, value];
 };
 
+// An extra is text on Android (sentry-android's scope takes a string), so what is settled here, once, is that it is text on both: a string
+// stays as it is, `null` and `undefined` remove the extra (an undefined value would be dropped by the JSON the bridge sends, and the key
+// with it), and anything else is its JSON.
+const checkExtras = (extras: Record<string, unknown>): Record<string, string | null> => {
+  if (typeof extras !== 'object' || extras === null || Array.isArray(extras)) {
+    return refuse('setExtras needs an object');
+  }
+  const checked: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(extras)) {
+    if (value === undefined || value === null) {
+      checked[key] = null;
+    } else if (typeof value === 'string') {
+      checked[key] = value;
+    } else {
+      let text: string | undefined;
+      try {
+        text = JSON.stringify(value);
+      } catch {
+        return refuse(`setExtras: the value of ${key} cannot be sent as JSON`);
+      }
+      if (text === undefined) {
+        return refuse(`setExtras: the value of ${key} cannot be sent as JSON`);
+      }
+      checked[key] = text;
+    }
+  }
+  return checked;
+};
+
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 export const start = (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', options);
 
@@ -144,6 +176,21 @@ export const setTags = async (tags: Record<string, SentrySdkTagValue>) => call<S
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export const setContext = async (key: string, value: Record<string, unknown> | null) =>
   call<SentrySdkScopeAnswer>('setContext', ...checkContext(key, value));
+
+/**
+ * Sets extras on the native scope: each value is its text on both platforms (a string as it is, anything else as JSON), and `null` or
+ * `undefined` removes the extra. Extras are the older, flatter relative of a context; prefer `setContext`.
+ */
+export const setExtras = async (extras: Record<string, unknown>) => call<SentrySdkScopeAnswer>('setExtras', checkExtras(extras));
+
+/**
+ * Stops the native SDK, flushing what it holds. A later `start` starts it again, and what the page set while it was down is kept for that
+ * start. `allowCrash` is taken back: the next `start` has to give it again.
+ */
+export const close = () => call<SentrySdkCloseAnswer>('close');
+
+/** Whether the native SDK is running, whoever started it. */
+export const isEnabled = () => call<boolean>('isEnabled');
 
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export const crash = () => call<never>('crash');

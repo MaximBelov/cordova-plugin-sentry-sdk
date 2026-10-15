@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.crash = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
+exports.crash = exports.isEnabled = exports.close = exports.setExtras = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
 const SERVICE = 'SentrySdk';
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
@@ -57,6 +57,37 @@ const checkContext = (key, value) => {
     }
     return [key, value];
 };
+// An extra is text on Android (sentry-android's scope takes a string), so what is settled here, once, is that it is text on both: a string
+// stays as it is, `null` and `undefined` remove the extra (an undefined value would be dropped by the JSON the bridge sends, and the key
+// with it), and anything else is its JSON.
+const checkExtras = (extras) => {
+    if (typeof extras !== 'object' || extras === null || Array.isArray(extras)) {
+        return refuse('setExtras needs an object');
+    }
+    const checked = {};
+    for (const [key, value] of Object.entries(extras)) {
+        if (value === undefined || value === null) {
+            checked[key] = null;
+        }
+        else if (typeof value === 'string') {
+            checked[key] = value;
+        }
+        else {
+            let text;
+            try {
+                text = JSON.stringify(value);
+            }
+            catch (_a) {
+                return refuse(`setExtras: the value of ${key} cannot be sent as JSON`);
+            }
+            if (text === undefined) {
+                return refuse(`setExtras: the value of ${key} cannot be sent as JSON`);
+            }
+            checked[key] = text;
+        }
+    }
+    return checked;
+};
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 const start = (options) => call('start', options);
 exports.start = start;
@@ -69,6 +100,21 @@ exports.setTags = setTags;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 const setContext = async (key, value) => call('setContext', ...checkContext(key, value));
 exports.setContext = setContext;
+/**
+ * Sets extras on the native scope: each value is its text on both platforms (a string as it is, anything else as JSON), and `null` or
+ * `undefined` removes the extra. Extras are the older, flatter relative of a context; prefer `setContext`.
+ */
+const setExtras = async (extras) => call('setExtras', checkExtras(extras));
+exports.setExtras = setExtras;
+/**
+ * Stops the native SDK, flushing what it holds. A later `start` starts it again, and what the page set while it was down is kept for that
+ * start. `allowCrash` is taken back: the next `start` has to give it again.
+ */
+const close = () => call('close');
+exports.close = close;
+/** Whether the native SDK is running, whoever started it. */
+const isEnabled = () => call('isEnabled');
+exports.isEnabled = isEnabled;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;

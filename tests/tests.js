@@ -20,7 +20,7 @@ exports.defineAutoTests = function () {
   describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
-      ['start', 'setUser', 'setTags', 'setContext', 'crash'].forEach(function (name) {
+      ['start', 'setUser', 'setTags', 'setContext', 'setExtras', 'close', 'isEnabled', 'crash'].forEach(function (name) {
         expect(typeof api[name]).toBe('function');
       });
     });
@@ -49,6 +49,37 @@ exports.defineAutoTests = function () {
         })
         .then(function (second) {
           expect(second).toBe('already started');
+          done();
+        }, failWith(done));
+    });
+  });
+
+  describe('isEnabled and close', function () {
+    // close stops the SDK, and the other specs start it again themselves, so this one leaves it running as it found it.
+    it('says whether the SDK is running, closes it, and starts again after', function (done) {
+      api
+        .start({ dsn: DSN })
+        .then(function () {
+          return api.isEnabled();
+        })
+        .then(function (enabled) {
+          expect(enabled).toBe(true);
+          return api.close();
+        })
+        .then(function (closed) {
+          expect(closed).toBe('closed');
+          return api.isEnabled();
+        })
+        .then(function (enabled) {
+          expect(enabled).toBe(false);
+          return api.close();
+        })
+        .then(function (closedAgain) {
+          expect(closedAgain).toBe('not running');
+          return api.start({ dsn: DSN });
+        })
+        .then(function (restarted) {
+          expect(restarted).toBe('started');
           done();
         }, failWith(done));
     });
@@ -92,6 +123,17 @@ exports.defineAutoTests = function () {
         })
         .then(function (cleared) {
           expect(cleared).toBe('cleared');
+          done();
+        }, failWith(done));
+    });
+
+    it('takes extras, with null removing one', function (done) {
+      running()
+        .then(function () {
+          return api.setExtras({ plain: 'text', count: 12, nested: { a: [1, 2] }, gone: null });
+        })
+        .then(function (set) {
+          expect(set).toBe('set');
           done();
         }, failWith(done));
     });

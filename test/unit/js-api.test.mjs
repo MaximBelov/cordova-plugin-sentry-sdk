@@ -31,6 +31,9 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setTags', [{ 'farm.region': 'IE', gone: null }], 'setTags', [{ 'farm.region': 'IE', gone: null }]],
     ['setContext', ['farm', { animals: 3 }], 'setContext', ['farm', { animals: 3 }]],
     ['setContext', ['farm', null], 'setContext', ['farm', null]],
+    ['setExtras', [{ a: 'x', b: null }], 'setExtras', [{ a: 'x', b: null }]],
+    ['close', [], 'close', []],
+    ['isEnabled', [], 'isEnabled', []],
     ['crash', [], 'crash', []],
   ];
   for (const [method, args, action, sent] of cases) {
@@ -54,9 +57,9 @@ test('the promise resolves with what native answers, and rejects with what nativ
   await assert.rejects(refused, /needs an options object with a dsn/);
 });
 
-test('the module exports exactly the five calls the README documents', () => {
+test('the module exports exactly the calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['crash', 'setContext', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['close', 'crash', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
 });
 
 /**
@@ -92,6 +95,29 @@ test('what native would read differently on the two platforms is refused before 
   for (const [call, attempt] of refused) {
     const reason = await outcome(attempt);
     assert.ok(typeof reason === 'string' && reason !== 'sent' && reason.includes(call), `${call} was not refused with a reason: ${reason}`);
+  }
+  assert.equal(calls.length, 0, 'nothing reached native');
+});
+
+test('an extra is its text on both platforms: a string as it is, anything else as JSON, null and undefined as a removal', () => {
+  const { api, calls } = load();
+  api.setExtras({ text: 'plain', quoted: '"q"', count: 12, flag: false, list: [1, 'two'], nested: { a: { b: null } }, gone: null, missing: undefined, when: new Date(0) });
+  assert.deepEqual(calls[0].args, [
+    { text: 'plain', quoted: '"q"', count: '12', flag: 'false', list: '[1,"two"]', nested: '{"a":{"b":null}}', gone: null, missing: null, when: '"1970-01-01T00:00:00.000Z"' },
+  ]);
+});
+
+test('extras that native could not read the same on both platforms are refused with the reason, and nothing is sent', async () => {
+  const { api, calls } = load();
+  const cycle = {};
+  cycle.self = cycle;
+  const refused = [
+    ...[null, undefined, 'x', 7, []].map((extras) => [extras, /setExtras needs an object/]),
+    ...[{ a: cycle }, { a: 10n }, { a: () => 1 }, { a: Symbol('s') }].map((extras) => [extras, /the value of a cannot be sent as JSON/]),
+  ];
+  for (const [extras, reason] of refused) {
+    const outcomeOf = await outcome(() => api.setExtras(extras));
+    assert.ok(typeof outcomeOf === 'string' && outcomeOf !== 'sent' && outcomeOf.startsWith('setExtras') && reason.test(outcomeOf), `${String(extras)}: ${outcomeOf}`);
   }
   assert.equal(calls.length, 0, 'nothing reached native');
 });

@@ -117,6 +117,9 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.setUser](#setUser)
 - [SentrySdk.setTags](#setTags)
 - [SentrySdk.setContext](#setContext)
+- [SentrySdk.setExtras](#setExtras)
+- [SentrySdk.close](#close)
+- [SentrySdk.isEnabled](#isEnabled)
 - [SentrySdk.crash](#crash)
 
 ## start
@@ -173,7 +176,7 @@ A scope call made while the SDK is not running would change a scope that the SDK
 starts. So the plugin keeps it instead, answers `queued`, and `start` applies it: the **last**
 change of each key (the user, each tag, each context), in no particular order between keys. The
 order of the calls does not matter, which is what an app needs when the user is known before the
-SDK is up. Nothing is kept for an SDK that never starts.
+SDK is up (an extra is a key like a tag). Nothing is kept for an SDK that never starts.
 
 ### What is refused
 
@@ -182,6 +185,32 @@ The wrapper settles what the two platforms would otherwise read differently, so 
 that is not an object or `null` is refused too. `setTags` takes an object whose values are strings, finite numbers, booleans or
 `null`, and `setContext` takes a key that is not empty and an object or `null`: an array, a string or no value is refused, where
 native used to take it as a removal. The promise rejects with the reason, a string that names the call, and nothing is sent.
+
+## setExtras
+
+`setExtras({ key: value | null }): Promise<'set' | 'queued'>`
+
+Sets extras on the native scope, the older and flatter relative of a context: prefer [`setContext`](#setContext) for anything with a
+shape. An extra is **text on both platforms** (sentry-android's scope takes only a string), so a string reaches Sentry as it is and
+anything else as its JSON: `12` is `12`, `false` is `false`, `[1,"two"]` and `{"a":1}` are those texts. `null` or `undefined`
+removes the extra. A value JSON cannot carry (a cycle, a BigInt, a function) is refused. Answers `set`, or `queued`: see
+[Before `start`](#before-start), where an extra is a key like a tag.
+
+## close
+
+`close(): Promise<'closed' | 'not running'>`
+
+Stops the native SDK, flushing what it holds (`Sentry.close` / `SentrySDK.close`), for a logout or an environment switch. It
+answers `not running` when there was no SDK to close, and nothing else changes. A later [`start`](#start) starts it again. What the
+page sets while the SDK is down is kept for that start, as before the first one, and `allowCrash` is not: it was the word of the
+`start` that is over, so the next `start` gives it again. Flushing can take as long as the SDK's shutdown timeout, which is why the
+call does not hold up the thread Cordova called it on.
+
+## isEnabled
+
+`isEnabled(): Promise<boolean>`
+
+Whether the native SDK is running, whoever started it: the plugin, or the app's own code.
 
 ## crash
 
