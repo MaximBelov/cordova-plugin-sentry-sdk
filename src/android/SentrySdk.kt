@@ -1,13 +1,17 @@
 package io.github.maximbelov.sentrysdk
 
+import io.sentry.Breadcrumb
 import io.sentry.Sentry
+import io.sentry.SentryLevel
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.core.SentryAndroidOptions
 import io.sentry.protocol.User
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaPlugin
+import org.apache.cordova.PluginResult
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Date
 
 /**
  * The native Sentry SDK, started and kept in sync from the page. Only the public API of
@@ -22,6 +26,10 @@ class SentrySdk : CordovaPlugin() {
     // page set before the SDK was running: the last change of each key, applied by `start`.
     private val pending = LinkedHashMap<String, () -> Unit>()
 
+    // Breadcrumbs are a trail, not a key, so what the page adds before the SDK is running is kept in order, up to the last
+    // MAX_PENDING_BREADCRUMBS, and `start` adds them. A clear drops them, as it would drop the SDK's own.
+    private val pendingBreadcrumbs = ArrayList<Breadcrumb>()
+
     // `crash` takes the process down, so it is refused unless the page said so in an accepted `start`: that it is a device test. It is the
     // page's word and not a lock, so it keeps a stray call from ending the app, not a script that can call `start` itself.
     private var crashAllowed = false
@@ -32,6 +40,11 @@ class SentrySdk : CordovaPlugin() {
             "setUser" -> setUser(args.optJSONObject(0), callbackContext)
             "setTags" -> setTags(args.optJSONObject(0), callbackContext)
             "setContext" -> setContext(args.optString(0), args.optJSONObject(1), callbackContext)
+            "addBreadcrumb" -> addBreadcrumb(args.optJSONObject(0), callbackContext)
+            "clearBreadcrumbs" -> clearBreadcrumbs(callbackContext)
+            "setExtras" -> setExtras(args.optJSONObject(0), callbackContext)
+            "close" -> close(callbackContext)
+            "isEnabled" -> isEnabled(callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -65,6 +78,8 @@ class SentrySdk : CordovaPlugin() {
         }
         pending.values.forEach { it() }
         pending.clear()
+        pendingBreadcrumbs.forEach { Sentry.addBreadcrumb(it) }
+        pendingBreadcrumbs.clear()
         crashAllowed = allowCrash
         callbackContext.success("started")
     }
@@ -123,6 +138,86 @@ class SentrySdk : CordovaPlugin() {
         callbackContext.success(if (applied) "set" else "queued")
     }
 
+    private fun addBreadcrumb(json: JSONObject?, callbackContext: CallbackContext) {
+        if (json == null) {
+            callbackContext.error("addBreadcrumb needs an object")
+            return
+        }
+        val breadcrumb = toBreadcrumb(json)
+        if (Sentry.isEnabled()) {
+            Sentry.addBreadcrumb(breadcrumb)
+            callbackContext.success("added")
+            return
+        }
+        pendingBreadcrumbs.add(breadcrumb)
+        while (pendingBreadcrumbs.size > MAX_PENDING_BREADCRUMBS) {
+            pendingBreadcrumbs.removeAt(0)
+        }
+        callbackContext.success("queued")
+    }
+
+    private fun clearBreadcrumbs(callbackContext: CallbackContext) {
+        pendingBreadcrumbs.clear()
+        if (Sentry.isEnabled()) {
+            Sentry.configureScope { it.clearBreadcrumbs() }
+        }
+        callbackContext.success("cleared")
+    }
+
+    /** The wrapper has mapped `log` and `critical` to `debug` and `fatal`, and settled the types: here a field is read, not checked. */
+    private fun toBreadcrumb(json: JSONObject): Breadcrumb {
+        val breadcrumb = if (json.has("timestamp")) Breadcrumb(Date((json.optDouble("timestamp") * 1000).toLong())) else Breadcrumb()
+        json.optString("type").takeIf { it.isNotEmpty() }?.let { breadcrumb.type = it }
+        json.optString("category").takeIf { it.isNotEmpty() }?.let { breadcrumb.category = it }
+        json.optString("message").takeIf { it.isNotEmpty() }?.let { breadcrumb.message = it }
+        breadcrumb.level = when (json.optString("level")) {
+            "fatal" -> SentryLevel.FATAL
+            "error" -> SentryLevel.ERROR
+            "warning" -> SentryLevel.WARNING
+            "info" -> SentryLevel.INFO
+            "debug" -> SentryLevel.DEBUG
+            else -> SentryLevel.INFO
+        }
+        // A breadcrumb keeps its data in a map that takes no null, so a null value is a key that is not there.
+        json.optJSONObject("data")?.let { data -> data.keys().forEach { key -> fromJson(data.opt(key))?.let { breadcrumb.setData(key, it) } } }
+        return breadcrumb
+    }
+
+    /** The wrapper has made every value text, or null for a removal. */
+    private fun setExtras(extras: JSONObject?, callbackContext: CallbackContext) {
+        if (extras == null) {
+            callbackContext.error("setExtras needs an object")
+            return
+        }
+        var applied = true
+        for (key in extras.keys()) {
+            val value = if (extras.isNull(key)) null else extras.getString(key)
+            applied = applyOrKeep("extra:$key") { if (value == null) Sentry.removeExtra(key) else Sentry.setExtra(key, value) } && applied
+        }
+        callbackContext.success(if (applied) "set" else "queued")
+    }
+
+    /**
+     * `Sentry.close` flushes, which can take as long as the SDK's shutdown timeout, so it does not run on the thread Cordova called
+     * the plugin on. What the page set while the SDK was down stays kept for the next `start`, and `allowCrash` does not: it was the
+     * word of the `start` that is over.
+     */
+    private fun close(callbackContext: CallbackContext) {
+        cordova.threadPool.execute {
+            if (!Sentry.isEnabled()) {
+                callbackContext.success("not running")
+                return@execute
+            }
+            Sentry.close()
+            crashAllowed = false
+            callbackContext.success("closed")
+        }
+    }
+
+    private fun isEnabled(callbackContext: CallbackContext) {
+        callbackContext.sendPluginResult(PluginResult(PluginResult.Status.OK, Sentry.isEnabled()))
+    }
+
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
     private fun crash(callbackContext: CallbackContext) {
         if (!crashAllowed) {
@@ -145,6 +240,11 @@ class SentrySdk : CordovaPlugin() {
             JSONObject.NULL, null -> null
             else -> value
         }
+
+    private companion object {
+        /** The SDK's own default for how many breadcrumbs a scope holds. */
+        const val MAX_PENDING_BREADCRUMBS = 100
+    }
 }
 
 /**

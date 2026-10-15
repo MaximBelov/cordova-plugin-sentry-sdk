@@ -54,6 +54,11 @@ final class SentrySdkTests: XCTestCase {
         case "setUser": target.setUser(command)
         case "setTags": target.setTags(command)
         case "setContext": target.setContext(command)
+        case "addBreadcrumb": target.addBreadcrumb(command)
+        case "clearBreadcrumbs": target.clearBreadcrumbs(command)
+        case "setExtras": target.setExtras(command)
+        case "close": target.close(command)
+        case "isEnabled": target.isEnabled(command)
         case "crash": target.crash(command)
         default: XCTFail("no such method: \(method)")
         }
@@ -305,6 +310,157 @@ final class SentrySdkTests: XCTestCase {
 
     func testSetContextWithoutAKeyIsRefused() {
         XCTAssertEqual(status(run("setContext", ["", ["x": 1]])), CDVCommandStatus_ERROR)
+    }
+
+    /// The scope's breadcrumbs that these tests added (their category starts with `t.`), serialised the way an event carries them; the SDK
+    /// adds some of its own at start.
+    private func crumbs() -> [[String: Any]] {
+        let all = scope().serialize()["breadcrumbs"] as? [[String: Any]] ?? []
+        return all.filter { ($0["category"] as? String ?? "").hasPrefix("t.") }
+    }
+
+    func testABreadcrumbAddedAfterStartLandsOnTheScopeWithWhatItWasGivenNestedDataIncluded() {
+        run("start", [["dsn": Self.dsn]])
+        let data: [String: Any] = ["id": 7, "ok": true, "nested": ["list": ["a", 1]]]
+        let result = run("addBreadcrumb", [["type": "http", "category": "t.fetch", "message": "GET /api", "level": "warning", "data": data]])
+        XCTAssertEqual(result.message as? String, "added")
+
+        let crumb = crumbs().first
+        XCTAssertEqual(crumbs().count, 1)
+        XCTAssertEqual(crumb?["type"] as? String, "http")
+        XCTAssertEqual(crumb?["message"] as? String, "GET /api")
+        XCTAssertEqual(crumb?["level"] as? String, "warning")
+        let seen = crumb?["data"] as? [String: Any]
+        XCTAssertEqual(seen?["id"] as? Int, 7)
+        XCTAssertEqual(seen?["ok"] as? Bool, true)
+        XCTAssertEqual((seen?["nested"] as? [String: Any])?["list"] as? [AnyHashable], ["a", 1])
+    }
+
+    func testTheLevelsAreTheSdksAndABreadcrumbWithNoneIsInfo() {
+        let levels: [(String?, SentryLevel)] = [("fatal", .fatal), ("error", .error), ("warning", .warning), ("info", .info), ("debug", .debug), (nil, .info)]
+        for (name, expected) in levels {
+            var dict: [String: Any] = ["category": "t.level"]
+            if let name = name { dict["level"] = name }
+            XCTAssertEqual(SentrySdk.breadcrumb(from: dict).level, expected, name ?? "no level")
+        }
+    }
+
+    func testABreadcrumbTakesItsTimestampInSecondsAndTheTimeOfTheCallWithout() {
+        XCTAssertEqual(SentrySdk.breadcrumb(from: ["category": "t.time", "timestamp": 1_760_000_000.5]).timestamp?.timeIntervalSince1970, 1_760_000_000.5)
+        let before = Date()
+        let stamped = SentrySdk.breadcrumb(from: ["category": "t.time"]).timestamp
+        XCTAssertNotNil(stamped)
+        XCTAssertGreaterThanOrEqual(stamped!, before.addingTimeInterval(-1))
+    }
+
+    func testBreadcrumbsAddedBeforeStartAreKeptInOrderAnsweredQueuedAndStartAddsThem() {
+        for i in 1...3 {
+            XCTAssertEqual(run("addBreadcrumb", [["category": "t.\(i)", "message": "m\(i)"]]).message as? String, "queued")
+        }
+        XCTAssertFalse(SentrySDK.isEnabled, "nothing started the SDK")
+
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(crumbs().compactMap { $0["message"] as? String }, ["m1", "m2", "m3"])
+
+        // what was kept is added once: a later one is the page's own, not a replay
+        XCTAssertEqual(run("addBreadcrumb", [["category": "t.4", "message": "m4"]]).message as? String, "added")
+        XCTAssertEqual(crumbs().compactMap { $0["message"] as? String }, ["m1", "m2", "m3", "m4"])
+    }
+
+    func testAClearBeforeStartDropsWhatWasKeptAndAClearAfterItEmptiesTheScope() {
+        run("addBreadcrumb", [["category": "t.1", "message": "dropped"]])
+        XCTAssertEqual(run("clearBreadcrumbs", []).message as? String, "cleared")
+        run("addBreadcrumb", [["category": "t.2", "message": "kept"]])
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(crumbs().compactMap { $0["message"] as? String }, ["kept"])
+
+        XCTAssertEqual(run("clearBreadcrumbs", []).message as? String, "cleared")
+        XCTAssertEqual(crumbs().count, 0)
+    }
+
+    func testTheNewestOfMoreThanAHundredBreadcrumbsKeptBeforeStartAreWhatStartAdds() {
+        for i in 1...130 { run("addBreadcrumb", [["category": "t.\(i)", "message": "m\(i)"]]) }
+        run("start", [["dsn": Self.dsn]])
+        let numbers = crumbs().compactMap { ($0["message"] as? String).flatMap { Int($0.dropFirst()) } }
+        // The SDK holds a hundred in all, its own among them, so one or two of the page's go to make room for its start.
+        XCTAssertTrue((98...100).contains(numbers.count), "\(numbers.count) breadcrumbs")
+        XCTAssertEqual(numbers, Array((131 - numbers.count)...130), "the newest, in order, none missing")
+    }
+
+    func testAddBreadcrumbWithoutAnObjectIsRefused() {
+        let result = run("addBreadcrumb", [NSNull()])
+        XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+        XCTAssertTrue((result.message as? String ?? "").contains("addBreadcrumb"))
+    }
+
+    private func extras() -> [String: String] {
+        (scope().serialize()["extra"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String }
+    }
+
+    func testSetExtrasPutsEachExtraOnTheScopeAsTextAndNullRemovesOne() {
+        run("start", [["dsn": Self.dsn]])
+        run("setExtras", [["gone": "soon"]])
+        XCTAssertEqual(run("setExtras", [["plain": "text", "count": "12", "json": "{\"a\":[1]}", "gone": NSNull()]]).message as? String, "set")
+        let seen = extras()
+        XCTAssertEqual(seen["plain"], "text")
+        XCTAssertEqual(seen["count"], "12")
+        XCTAssertEqual(seen["json"], "{\"a\":[1]}")
+        XCTAssertNil(seen["gone"])
+    }
+
+    func testExtrasSetBeforeStartAreKeptAnsweredQueuedAndStartAppliesTheLastChangeOfEachKey() {
+        XCTAssertEqual(run("setExtras", [["a": "1", "gone": "soon"]]).message as? String, "queued")
+        XCTAssertEqual(run("setExtras", [["a": "2", "gone": NSNull(), "b": "3"]]).message as? String, "queued")
+        XCTAssertFalse(SentrySDK.isEnabled, "nothing started the SDK")
+
+        // every key is its own change: the order a dictionary gives its keys in must not decide which of them survive
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(extras(), ["a": "2", "b": "3"])
+    }
+
+    func testSetExtrasWithoutAnObjectIsRefused() {
+        let result = run("setExtras", [NSNull()])
+        XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+        XCTAssertTrue((result.message as? String ?? "").contains("setExtras"))
+    }
+
+    func testIsEnabledSaysWhetherTheSdkIsRunningWhoeverStartedIt() {
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, false)
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, true)
+        SentrySDK.close()
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, false)
+        SentrySDK.start { $0.dsn = Self.dsn }
+        XCTAssertEqual(run("isEnabled", []).message as? Bool, true, "an SDK the app started counts")
+    }
+
+    func testCloseStopsTheSdkAndSaysSoSaysNotRunningWhenThereWasNoneAndAStartAfterItStartsItAgain() {
+        XCTAssertEqual(run("close", []).message as? String, "not running")
+
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertTrue(SentrySDK.isEnabled)
+        XCTAssertEqual(run("close", []).message as? String, "closed")
+        XCTAssertFalse(SentrySDK.isEnabled)
+        XCTAssertEqual(run("close", []).message as? String, "not running")
+
+        XCTAssertEqual(run("start", [["dsn": Self.dsn]]).message as? String, "started")
+        XCTAssertTrue(SentrySDK.isEnabled)
+    }
+
+    func testCloseTakesTheAllowCrashOfTheStartThatIsOverAndWhatThePageSetsWhileTheSdkIsDownIsKeptForTheNextStart() {
+        var crashes = 0
+        plugin.crashAction = { crashes += 1 }
+        run("start", [["dsn": Self.dsn, "allowCrash": true]])
+        run("close", [])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "a closed SDK has no crash to allow")
+
+        XCTAssertEqual(run("setTags", [["while": "down"]]).message as? String, "queued")
+        XCTAssertEqual(run("setExtras", [["x": "1"]]).message as? String, "queued")
+        run("start", [["dsn": Self.dsn]])
+        XCTAssertEqual(scope().tags["while"], "down")
+        XCTAssertEqual(extras(), ["x": "1"])
+        XCTAssertEqual(status(run("crash", [])), CDVCommandStatus_ERROR, "the new start did not allow it either")
+        XCTAssertEqual(crashes, 0, "nothing crashed")
     }
 
     /// The crash itself takes the process down, so it never answers: this calls it the way Cordova does and says whether it went ahead.

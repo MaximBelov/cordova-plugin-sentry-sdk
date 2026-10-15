@@ -69,8 +69,25 @@ export type SentrySdkTagValue = string | number | boolean | null;
 export type SentrySdkStartAnswer = 'started' | 'already started';
 /** What `setUser` answers: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
-/** What `setTags` and `setContext` answer: `queued` while the SDK is not running, and `start` applies it. */
+/** What `setTags`, `setContext` and `setExtras` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
+/** The level of a breadcrumb. `log` and `critical` are the JavaScript SDK's own: native has `debug` and `fatal` instead, and gets those. */
+export type SentrySdkBreadcrumbLevel = 'fatal' | 'critical' | 'error' | 'warning' | 'log' | 'info' | 'debug';
+/** A breadcrumb as the JavaScript SDK has it; what the plugin does not read (`event_id`, say) is left out. */
+export interface SentrySdkBreadcrumb {
+    type?: string;
+    category?: string;
+    message?: string;
+    level?: SentrySdkBreadcrumbLevel;
+    /** Seconds since the epoch, as in the JavaScript SDK. Unset, native takes the time of the call. */
+    timestamp?: number;
+    /** Anything JSON can carry, nested or not. */
+    data?: Record<string, unknown>;
+}
+/** What `addBreadcrumb` answers: `queued` while the SDK is not running, and `start` adds it. */
+export type SentrySdkBreadcrumbAnswer = 'added' | 'queued';
+/** What `close` answers: `closed`, or `not running` when there was no SDK to close. */
+export type SentrySdkCloseAnswer = 'closed' | 'not running';
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 export declare const start: (options: SentrySdkStartOptions) => Promise<SentrySdkStartAnswer>;
 /** Sets the user on the native scope, or clears it with `null`. */
@@ -79,5 +96,24 @@ export declare const setUser: (user: SentrySdkUser | null) => Promise<SentrySdkU
 export declare const setTags: (tags: Record<string, SentrySdkTagValue>) => Promise<SentrySdkScopeAnswer>;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export declare const setContext: (key: string, value: Record<string, unknown> | null) => Promise<SentrySdkScopeAnswer>;
+/**
+ * Adds a breadcrumb to the native scope, so a native crash carries what the page did before it. While the SDK is not running it is
+ * kept, in order and up to the last hundred, and `start` adds them.
+ */
+export declare const addBreadcrumb: (breadcrumb: SentrySdkBreadcrumb) => Promise<SentrySdkBreadcrumbAnswer>;
+/** Clears the native scope's breadcrumbs, and the ones kept for `start`. */
+export declare const clearBreadcrumbs: () => Promise<"cleared">;
+/**
+ * Sets extras on the native scope: each value is its text on both platforms (a string as it is, anything else as JSON), and `null` or
+ * `undefined` removes the extra. Extras are the older, flatter relative of a context; prefer `setContext`.
+ */
+export declare const setExtras: (extras: Record<string, unknown>) => Promise<SentrySdkScopeAnswer>;
+/**
+ * Stops the native SDK, flushing what it holds. A later `start` starts it again, and what the page set while it was down is kept for that
+ * start. `allowCrash` is taken back: the next `start` has to give it again.
+ */
+export declare const close: () => Promise<SentrySdkCloseAnswer>;
+/** Whether the native SDK is running, whoever started it. */
+export declare const isEnabled: () => Promise<boolean>;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export declare const crash: () => Promise<never>;
