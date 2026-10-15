@@ -1,3 +1,6 @@
+= next =
+README: the SDKs' own log is not forwarded to the page, and why: sentry-android has a stable logger option, sentry-cocoa 9.30.2 only a hook its source marks as removable in any minor release
+
 = 0.2.0 =
 Android: sentry-android 8.61.0 (it was 8.60.0). Its fixes are about callbacks that throw, which this plugin sets none of, and Session Replay, which it never turns on; the NDK module it carries moves from sentry-native 0.17.2 to 0.17.3
 Android: the sentry-android artifact is the plugin variable SENTRY_ANDROID_ARTIFACT, and the default is sentry-android-core. The plugin took sentry-android before, which brings the NDK module (crashes in native C and C++ code) and Session Replay along. An app that wants native crashes installs with SENTRY_ANDROID_ARTIFACT=sentry-android; one that did not know it had them loses them without it
