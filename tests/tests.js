@@ -20,7 +20,7 @@ exports.defineAutoTests = function () {
   describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
-      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'setExtras', 'close', 'isEnabled', 'crash'].forEach(function (name) {
+      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'setExtras', 'close', 'isEnabled', 'getDeviceInfo', 'crash'].forEach(function (name) {
         expect(typeof api[name]).toBe('function');
       });
     });
@@ -111,6 +111,19 @@ exports.defineAutoTests = function () {
           expect(restarted).toBe('started');
           done();
         }, failWith(done));
+    });
+  });
+
+  describe('getDeviceInfo', function () {
+    it('answers the OS, the device and the app from the system, whether or not the SDK is running', function (done) {
+      api.getDeviceInfo().then(function (info) {
+        expect(Object.keys(info).sort().join(',')).toBe('appBuild,appRelease,deviceModel,osName,osVersion');
+        expect(info.osName).toMatch(/^(iOS|iPadOS|Android)$/);
+        expect(info.osVersion).toMatch(/^\S+$/);
+        expect(info.deviceModel.length > 0).toBe(true);
+        expect(info.appBuild.length > 0).toBe(true);
+        done();
+      }, failWith(done));
     });
   });
 

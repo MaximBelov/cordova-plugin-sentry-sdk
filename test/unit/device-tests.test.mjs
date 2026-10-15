@@ -60,6 +60,7 @@ function fakeNative() {
         success(was ? 'closed' : 'not running');
       },
       isEnabled: () => success(started),
+      getDeviceInfo: () => success({ osName: 'iOS', osVersion: '26.3', deviceModel: 'iPhone17,1', appRelease: '1.0.0', appBuild: '1' }),
       crash: () => (crashAllowed ? undefined : failure('crash is refused: it is for a device test, and start has to be given allowCrash: true')),
     }[action];
     if (!answer) return failure(`unknown action ${action}`);

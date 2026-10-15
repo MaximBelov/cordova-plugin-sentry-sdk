@@ -122,6 +122,7 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.setExtras](#setExtras)
 - [SentrySdk.close](#close)
 - [SentrySdk.isEnabled](#isEnabled)
+- [SentrySdk.getDeviceInfo](#getDeviceInfo)
 - [SentrySdk.crash](#crash)
 
 ## start
@@ -255,6 +256,27 @@ call does not hold up the thread Cordova called it on.
 `isEnabled(): Promise<boolean>`
 
 Whether the native SDK is running, whoever started it: the plugin, or the app's own code.
+
+## getDeviceInfo
+
+`getDeviceInfo(): Promise<{ osName, osVersion, deviceModel, appRelease, appBuild }>`
+
+Reads the operating system, the device and the app from the system, all text. It needs no running SDK and sets nothing.
+
+| Field | iOS | Android |
+| --- | --- | --- |
+| `osName` | `UIDevice.systemName`: `iOS`, or `iPadOS` on an iPad | `Android` |
+| `osVersion` | `UIDevice.systemVersion`, `26.3` | `Build.VERSION.RELEASE`, `15` |
+| `deviceModel` | the hardware identifier, `iPhone17,1` (a simulator gives the model it stands in for) | `Build.MODEL`, `Pixel 10a` |
+| `appRelease` | `CFBundleShortVersionString`, empty when the app declares none | `versionName`, empty when none |
+| `appBuild` | `CFBundleVersion`, empty when it is not text | `versionCode`, which is a `Long` and is sent as its text |
+
+**Why this exists:** the page cannot get these from its own web view, because the user agent is not the system's answer. Measured: Safari
+on an iOS 26.3 simulator sends `CPU iPhone OS 18_7` in its user agent (and `Version/26.3`), so an event that takes the OS version from it
+is wrong by a major version. Chrome documents a reduced user agent too, `Android 10; K` in its example, with the model behind a client
+hint ([Privacy Sandbox](https://privacysandbox.google.com/protections/user-agent)); that page does not mention Android WebView, and no
+web view was measured on Android here. The JS SDK reads its `os` and `device` contexts from the user agent, so a page that wants the true
+ones can set them from this answer, for instance with `setContext('os', ...)` in its own SDK.
 
 ## crash
 

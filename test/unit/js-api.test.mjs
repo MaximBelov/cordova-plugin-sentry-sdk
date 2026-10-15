@@ -36,6 +36,7 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setExtras', [{ a: 'x', b: null }], 'setExtras', [{ a: 'x', b: null }]],
     ['close', [], 'close', []],
     ['isEnabled', [], 'isEnabled', []],
+    ['getDeviceInfo', [], 'getDeviceInfo', []],
     ['crash', [], 'crash', []],
   ];
   for (const [method, args, action, sent] of cases) {
@@ -61,7 +62,7 @@ test('the promise resolves with what native answers, and rejects with what nativ
 
 test('the module exports exactly the calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['addBreadcrumb', 'clearBreadcrumbs', 'close', 'crash', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['addBreadcrumb', 'clearBreadcrumbs', 'close', 'crash', 'getDeviceInfo', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
 });
 
 /**

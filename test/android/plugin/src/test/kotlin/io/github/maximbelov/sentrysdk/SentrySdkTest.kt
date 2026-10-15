@@ -1,5 +1,6 @@
 package io.github.maximbelov.sentrysdk
 
+import android.content.pm.PackageInfo
 import androidx.appcompat.app.AppCompatActivity
 import io.sentry.Breadcrumb
 import io.sentry.Sentry
@@ -28,7 +29,9 @@ import org.mockito.Mockito.timeout
 import org.mockito.Mockito.verify
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 /**
  * What the plugin answers JavaScript, and what it puts on the native scope, with sentry-android started for real against a DSN
@@ -190,6 +193,44 @@ class SentrySdkTest {
         assertTrue(configured("enableAnrTracking" to false).isEnableUncaughtExceptionHandler)
         assertFalse(configured("enableAutoSessionTracking" to false).isEnableAutoSessionTracking)
         assertTrue(configured().isEnableAutoSessionTracking)
+    }
+
+    @Test
+    fun `getDeviceInfo answers the OS, the device and the app from the system, with no SDK running`() {
+        val info = PackageInfo().apply {
+            packageName = activity.packageName
+            versionName = "7.1.0"
+            longVersionCode = 42
+        }
+        shadowOf(activity.packageManager).installPackage(info)
+        // Robolectric gives the model and the manufacturer the same text, which would let a read of the wrong one pass.
+        ReflectionHelpers.setStaticField(android.os.Build::class.java, "MODEL", "Pixel 10a")
+        ReflectionHelpers.setStaticField(android.os.Build::class.java, "MANUFACTURER", "Google")
+        assertFalse(Sentry.isEnabled())
+        val result = run("getDeviceInfo")
+        assertEquals(PluginResult.Status.OK.ordinal, result.status)
+        val answer = JSONObject(result.message)
+        assertEquals(setOf("osName", "osVersion", "deviceModel", "appRelease", "appBuild"), answer.keys().asSequence().toSet())
+        assertEquals("Android", answer.getString("osName"))
+        assertEquals(android.os.Build.VERSION.RELEASE, answer.getString("osVersion"))
+        assertEquals("Pixel 10a", answer.getString("deviceModel"))
+        assertEquals("7.1.0", answer.getString("appRelease"))
+        assertEquals("42", answer.getString("appBuild"))
+    }
+
+    @Test
+    fun `deviceInfo turns what the system does not give into empty text, and the build number into its text`() {
+        val answer = deviceInfo(null, null, null, 0)
+        assertEquals("Android", answer.getString("osName"))
+        assertEquals("", answer.getString("osVersion"))
+        assertEquals("", answer.getString("deviceModel"))
+        assertEquals("", answer.getString("appRelease"))
+        assertEquals("0", answer.getString("appBuild"))
+        // a build number past what an Int holds, which versionCode could not carry
+        assertEquals("4294967296", deviceInfo("15", "Pixel 10a", "1.0", 4294967296L).getString("appBuild"))
+        assertEquals("Pixel 10a", deviceInfo("15", "Pixel 10a", "1.0", 1).getString("deviceModel"))
+        assertEquals("15", deviceInfo("15", "Pixel 10a", "1.0", 1).getString("osVersion"))
+        assertEquals("1.0", deviceInfo("15", "Pixel 10a", "1.0", 1).getString("appRelease"))
     }
 
     @Test

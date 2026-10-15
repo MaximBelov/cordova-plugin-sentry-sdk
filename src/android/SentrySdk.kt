@@ -1,6 +1,8 @@
 package io.github.maximbelov.sentrysdk
 
 import io.sentry.Breadcrumb
+import android.content.pm.PackageManager
+import android.os.Build
 import io.sentry.Sentry
 import io.sentry.SentryLevel
 import io.sentry.android.core.SentryAndroid
@@ -45,6 +47,7 @@ class SentrySdk : CordovaPlugin() {
             "setExtras" -> setExtras(args.optJSONObject(0), callbackContext)
             "close" -> close(callbackContext)
             "isEnabled" -> isEnabled(callbackContext)
+            "getDeviceInfo" -> getDeviceInfo(callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -218,6 +221,18 @@ class SentrySdk : CordovaPlugin() {
         callbackContext.sendPluginResult(PluginResult(PluginResult.Status.OK, Sentry.isEnabled()))
     }
 
+    /** What the system says, which the web view's user agent does not: Chrome freezes the Android version and the model in it. */
+    @Suppress("DEPRECATION")
+    private fun getDeviceInfo(callbackContext: CallbackContext) {
+        val context = cordova.context
+        val packages = context.packageManager
+        val info =
+            if (Build.VERSION.SDK_INT >= 33) packages.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            else packages.getPackageInfo(context.packageName, 0)
+        val build = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+        callbackContext.success(deviceInfo(Build.VERSION.RELEASE, Build.MODEL, info.versionName, build))
+    }
+
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
     private fun crash(callbackContext: CallbackContext) {
         if (!crashAllowed) {
@@ -276,3 +291,12 @@ internal fun configure(sentryOptions: SentryAndroidOptions, options: JSONObject)
     if (options.has("sampleRate")) sentryOptions.sampleRate = options.optDouble("sampleRate")
     if (options.has("sessionTrackingIntervalMillis")) sentryOptions.sessionTrackingIntervalMillis = options.optLong("sessionTrackingIntervalMillis")
 }
+
+/** The answer of `getDeviceInfo`, from what the system gave. On its own so it can be tested with values the test device does not have. */
+internal fun deviceInfo(release: String?, model: String?, versionName: String?, versionCode: Long): JSONObject =
+    JSONObject()
+        .put("osName", "Android")
+        .put("osVersion", release.orEmpty())
+        .put("deviceModel", model.orEmpty())
+        .put("appRelease", versionName.orEmpty())
+        .put("appBuild", versionCode.toString())
