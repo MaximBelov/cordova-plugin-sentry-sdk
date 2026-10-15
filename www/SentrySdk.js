@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.crash = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
+exports.crash = exports.getDeviceInfo = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
 const SERVICE = 'SentrySdk';
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
@@ -69,6 +69,9 @@ exports.setTags = setTags;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 const setContext = async (key, value) => call('setContext', ...checkContext(key, value));
 exports.setContext = setContext;
+/** Reads the OS, the device and the app from the system. Needs no running SDK, and changes nothing. */
+const getDeviceInfo = () => call('getDeviceInfo');
+exports.getDeviceInfo = getDeviceInfo;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;

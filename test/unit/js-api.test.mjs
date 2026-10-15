@@ -31,6 +31,7 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setTags', [{ 'farm.region': 'IE', gone: null }], 'setTags', [{ 'farm.region': 'IE', gone: null }]],
     ['setContext', ['farm', { animals: 3 }], 'setContext', ['farm', { animals: 3 }]],
     ['setContext', ['farm', null], 'setContext', ['farm', null]],
+    ['getDeviceInfo', [], 'getDeviceInfo', []],
     ['crash', [], 'crash', []],
   ];
   for (const [method, args, action, sent] of cases) {
@@ -54,9 +55,9 @@ test('the promise resolves with what native answers, and rejects with what nativ
   await assert.rejects(refused, /needs an options object with a dsn/);
 });
 
-test('the module exports exactly the five calls the README documents', () => {
+test('the module exports exactly the six calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['crash', 'setContext', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['crash', 'getDeviceInfo', 'setContext', 'setTags', 'setUser', 'start']);
 });
 
 /**

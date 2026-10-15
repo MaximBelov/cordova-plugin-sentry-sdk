@@ -54,6 +54,7 @@ final class SentrySdkTests: XCTestCase {
         case "setUser": target.setUser(command)
         case "setTags": target.setTags(command)
         case "setContext": target.setContext(command)
+        case "getDeviceInfo": target.getDeviceInfo(command)
         case "crash": target.crash(command)
         default: XCTFail("no such method: \(method)")
         }
@@ -192,6 +193,36 @@ final class SentrySdkTests: XCTestCase {
         XCTAssertEqual(explicit.enableAutoSessionTracking, false)
         XCTAssertEqual(explicit.enableMetricKit, true)
         XCTAssertEqual(explicit.appHangTimeoutInterval, Options().appHangTimeoutInterval, "unset keeps the SDK's default")
+    }
+
+    func testGetDeviceInfoAnswersTheOsTheDeviceAndTheAppFromTheSystemWithNoSdkRunning() {
+        XCTAssertFalse(SentrySDK.isEnabled)
+        let result = run("getDeviceInfo", [])
+        XCTAssertEqual(status(result), CDVCommandStatus_OK)
+        let answer = result.message as? [String: String]
+        XCTAssertEqual(Set(answer?.keys ?? [:].keys), ["osName", "osVersion", "deviceModel", "appRelease", "appBuild"])
+        XCTAssertEqual(answer?["osName"], UIDevice.current.systemName)
+        XCTAssertEqual(answer?["osVersion"], UIDevice.current.systemVersion)
+        XCTAssertEqual(answer?["deviceModel"], ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"], "a simulator names the device it stands in for")
+        XCTAssertEqual(answer?["appRelease"], Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
+        XCTAssertEqual(answer?["appBuild"], Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "")
+    }
+
+    func testDeviceInfoTakesTheReleaseAndTheBuildFromTheBundleAndLeavesWhatIsMissingEmpty() {
+        let full = SentrySdk.deviceInfo(
+            systemName: "iPadOS", systemVersion: "26.3", model: "iPad16,3",
+            bundleInfo: ["CFBundleShortVersionString": "7.1.0", "CFBundleVersion": "42"])
+        XCTAssertEqual(full, ["osName": "iPadOS", "osVersion": "26.3", "deviceModel": "iPad16,3", "appRelease": "7.1.0", "appBuild": "42"])
+        let empty = SentrySdk.deviceInfo(systemName: "iOS", systemVersion: "18.2", model: "iPhone17,1", bundleInfo: nil)
+        XCTAssertEqual(empty["appRelease"], "")
+        XCTAssertEqual(empty["appBuild"], "")
+        XCTAssertEqual(empty["osName"], "iOS")
+        let wrongTypes = SentrySdk.deviceInfo(systemName: "iOS", systemVersion: "18.2", model: "x", bundleInfo: ["CFBundleVersion": 42])
+        XCTAssertEqual(wrongTypes["appBuild"], "", "a build number that is not text in the plist is left out, not guessed")
+    }
+
+    func testTheHardwareModelIsNeverEmpty() {
+        XCTAssertFalse(SentrySdk.hardwareModel().isEmpty)
     }
 
     func testSetUserPutsTheUserOnTheScopeAndNullClearsIt() {

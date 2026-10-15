@@ -46,10 +46,16 @@ async function app(): Promise<void> {
   // @ts-expect-error a context is an object or null
   await sdk.setContext('account', 'text');
 
+  const device: { osName: string; osVersion: string; deviceModel: string; appRelease: string; appBuild: string } = await sdk.getDeviceInfo();
+  // @ts-expect-error getDeviceInfo takes no argument
+  await sdk.getDeviceInfo('ios');
+  // @ts-expect-error the field is osVersion
+  void device.osversion;
+
   // The process is gone, so the promise never settles: `never`, not `void`.
   const crashed: never = await sdk.crash();
 
-  void [started, wrongStart, user, cleared, tags, wrongTags, context, removed, crashed];
+  void [started, wrongStart, user, cleared, tags, wrongTags, context, removed, device, crashed];
 }
 
 void app;

@@ -1,5 +1,7 @@
 package io.github.maximbelov.sentrysdk
 
+import android.content.pm.PackageManager
+import android.os.Build
 import io.sentry.Sentry
 import io.sentry.android.core.SentryAndroid
 import io.sentry.protocol.User
@@ -31,6 +33,7 @@ class SentrySdk : CordovaPlugin() {
             "setUser" -> setUser(args.optJSONObject(0), callbackContext)
             "setTags" -> setTags(args.optJSONObject(0), callbackContext)
             "setContext" -> setContext(args.optString(0), args.optJSONObject(1), callbackContext)
+            "getDeviceInfo" -> getDeviceInfo(callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -129,6 +132,18 @@ class SentrySdk : CordovaPlugin() {
         callbackContext.success(if (applied) "set" else "queued")
     }
 
+    /** What the system says, which the web view's user agent does not: Chrome freezes the Android version and the model in it. */
+    @Suppress("DEPRECATION")
+    private fun getDeviceInfo(callbackContext: CallbackContext) {
+        val context = cordova.context
+        val packages = context.packageManager
+        val info =
+            if (Build.VERSION.SDK_INT >= 33) packages.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+            else packages.getPackageInfo(context.packageName, 0)
+        val build = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+        callbackContext.success(deviceInfo(Build.VERSION.RELEASE, Build.MODEL, info.versionName, build))
+    }
+
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */
     private fun crash(callbackContext: CallbackContext) {
         if (!crashAllowed) {
@@ -152,3 +167,12 @@ class SentrySdk : CordovaPlugin() {
             else -> value
         }
 }
+
+/** The answer of `getDeviceInfo`, from what the system gave. On its own so it can be tested with values the test device does not have. */
+internal fun deviceInfo(release: String?, model: String?, versionName: String?, versionCode: Long): JSONObject =
+    JSONObject()
+        .put("osName", "Android")
+        .put("osVersion", release.orEmpty())
+        .put("deviceModel", model.orEmpty())
+        .put("appRelease", versionName.orEmpty())
+        .put("appBuild", versionCode.toString())

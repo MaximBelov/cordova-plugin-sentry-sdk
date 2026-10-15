@@ -50,6 +50,7 @@ function fakeNative() {
       setUser: () => success(!started ? 'queued' : args[0] === null ? 'cleared' : 'set'),
       setTags: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'set' : 'queued') : failure('setTags needs an object')),
       setContext: () => (args[0] ? success(started ? 'set' : 'queued') : failure('setContext needs a key')),
+      getDeviceInfo: () => success({ osName: 'iOS', osVersion: '26.3', deviceModel: 'iPhone17,1', appRelease: '1.0.0', appBuild: '1' }),
       crash: () => (crashAllowed ? undefined : failure('crash is refused: it is for a device test, and start has to be given allowCrash: true')),
     }[action];
     if (!answer) return failure(`unknown action ${action}`);

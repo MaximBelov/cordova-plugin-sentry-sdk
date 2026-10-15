@@ -72,6 +72,23 @@ export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 /** What `setTags` and `setContext` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
 
+/**
+ * What the system says about the device and the app, as the platforms spell it. It exists because a web view cannot be asked: its user
+ * agent is not the truth (see the README), and a page that sets the OS version or the device model on an event should set the real one.
+ */
+export interface SentrySdkDeviceInfo {
+  /** `iOS`, `iPadOS` or `Android`, as the system names itself. */
+  osName: string;
+  /** The OS version the way the system gives it: `26.3`, `15`. */
+  osVersion: string;
+  /** iOS: the hardware identifier, `iPhone17,1` (a simulator gives the model it stands in for). Android: the model, `Pixel 10a`. */
+  deviceModel: string;
+  /** The version a store shows: `CFBundleShortVersionString`, `versionName`. Empty when the app declares none. */
+  appRelease: string;
+  /** The build number, as text on both: `CFBundleVersion`, `versionCode`. */
+  appBuild: string;
+}
+
 const call = <T>(action: string, ...args: unknown[]) =>
   new Promise<T>((resolve, reject) => cordova.exec((r) => resolve(r as T), reject, SERVICE, action, args));
 
@@ -144,6 +161,9 @@ export const setTags = async (tags: Record<string, SentrySdkTagValue>) => call<S
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export const setContext = async (key: string, value: Record<string, unknown> | null) =>
   call<SentrySdkScopeAnswer>('setContext', ...checkContext(key, value));
+
+/** Reads the OS, the device and the app from the system. Needs no running SDK, and changes nothing. */
+export const getDeviceInfo = () => call<SentrySdkDeviceInfo>('getDeviceInfo');
 
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export const crash = () => call<never>('crash');

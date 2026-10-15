@@ -1,6 +1,7 @@
 import Cordova
 import Foundation
 import Sentry
+import UIKit
 
 /// The native Sentry SDK, started and kept in sync from the page. Only the public API of sentry-cocoa:
 /// `SentrySDK.start`, `setUser`, `configureScope`, `crash`. No transport, no envelope bridge, no
@@ -138,6 +139,35 @@ import Sentry
             }
         }
         reply(command, ok: true, applied ? "set" : "queued")
+    }
+
+    /// What the system says, which the web view's user agent does not: WebKit keeps the OS version in it where it was.
+    @objc(getDeviceInfo:)
+    func getDeviceInfo(_ command: CDVInvokedUrlCommand) {
+        let device = UIDevice.current
+        let info = SentrySdk.deviceInfo(
+            systemName: device.systemName, systemVersion: device.systemVersion, model: SentrySdk.hardwareModel(), bundleInfo: Bundle.main.infoDictionary)
+        commandDelegate.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: info), callbackId: command.callbackId)
+    }
+
+    /// The answer of `getDeviceInfo`, from what the system gave. On its own so it can be tested with values the test device does not have.
+    static func deviceInfo(systemName: String, systemVersion: String, model: String, bundleInfo: [String: Any]?) -> [String: String] {
+        [
+            "osName": systemName,
+            "osVersion": systemVersion,
+            "deviceModel": model,
+            "appRelease": (bundleInfo?["CFBundleShortVersionString"] as? String) ?? "",
+            "appBuild": (bundleInfo?["CFBundleVersion"] as? String) ?? "",
+        ]
+    }
+
+    /// The hardware identifier, `iPhone17,1`. A simulator runs on the Mac's architecture, so `uname` says `arm64` there; it names the
+    /// device it stands in for in its environment.
+    static func hardwareModel() -> String {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"], !simulated.isEmpty { return simulated }
+        var system = utsname()
+        uname(&system)
+        return withUnsafeBytes(of: &system.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
     }
 
     /// For a device probe: the process goes down, so this never answers. Refused unless `start` allowed it.
