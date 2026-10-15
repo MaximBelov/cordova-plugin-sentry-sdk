@@ -398,6 +398,21 @@ A native stack trace is readable in Sentry only when the build's debug symbols a
 the dSYMs of the iOS build with `sentry-cli debug-files upload`, and the mapping file of an Android
 build that is minified (R8 or ProGuard). This plugin uploads nothing.
 
+### The SDKs' own log
+
+What the SDKs print about themselves, with [`start`](#start)'s `debug` option on, goes to logcat on Android and to the console on iOS. The
+plugin does not forward it to the page, so a session that is debugged from the browser's DevTools does not see it; read it where it is written. This was
+checked against sentry-android 8.61.0 and sentry-cocoa 9.30.2, and left out on purpose:
+
+- sentry-android takes a logger in its options, `SentryOptions.setLogger(ILogger)`, which is a stable API.
+- sentry-cocoa has one hook, `SentrySDK.internal.setLogOutput`. It is `public`, and its source says it is for hybrid SDKs and "may change,
+  be renamed, or be removed in any minor release without prior deprecation". The plugin otherwise calls only the API an app is meant to
+  call, so that is the one call whose removal would arrive as a failing build in a pull request that moves the pin.
+- A forward that works on one platform and not on the other is a call that works half of the time. It would also be the first call that
+  answers more than once, where every call of the plugin answers exactly once, so the page would register a callback that native keeps.
+
+If you need it, open an issue: the Android half is the easy one, and the iOS half is the decision about depending on that hook.
+
 ## Versions of the SDKs
 
 - sentry-cocoa is pinned exactly in `Package.swift`, and an app cannot override it: a fix in the SDK
