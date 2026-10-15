@@ -1,3 +1,6 @@
+= next =
+www/scope-sync: bindScope(scope) wraps the setters of a scope of the JavaScript SDK (setUser, setTag, setTags, setExtra, setExtras, setContext, addBreadcrumb, clearBreadcrumbs) so that what the page sets also goes to the plugin. No dependency: the scope is taken by its shape, window.SentrySdk is looked up at every call, and a failure on the way goes to onError and never to the page
+
 = 0.2.0 =
 Android: sentry-android 8.61.0 (it was 8.60.0). Its fixes are about callbacks that throw, which this plugin sets none of, and Session Replay, which it never turns on; the NDK module it carries moves from sentry-native 0.17.2 to 0.17.3
 Android: the sentry-android artifact is the plugin variable SENTRY_ANDROID_ARTIFACT, and the default is sentry-android-core. The plugin took sentry-android before, which brings the NDK module (crashes in native C and C++ code) and Session Replay along. An app that wants native crashes installs with SENTRY_ANDROID_ARTIFACT=sentry-android; one that did not know it had them loses them without it

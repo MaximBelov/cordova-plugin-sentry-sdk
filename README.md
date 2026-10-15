@@ -195,6 +195,43 @@ and sentry-android flushes what it can to disk at the crash and sends what is le
 It is refused, the promise rejecting, unless the last accepted `start` was given `allowCrash: true`. That keeps a stray call
 from ending the app. It is not a lock against a script that can call `start` itself.
 
+## Keeping the page's scope in sync
+
+`bindScope(scope, options?)` in `www/scope-sync` is a helper for an app whose page uses the JavaScript SDK. It wraps the setters of a scope so
+that what the page sets there also goes to this plugin, and a native crash carries what the page knew. It is not part of `window.SentrySdk`
+and the plugin does not inject it: a bundler imports it from the package, and it needs nothing else, the scope being taken by its shape.
+
+```ts
+import * as Sentry from '@sentry/browser';
+import { bindScope } from 'cordova-plugin-sentry-sdk/www/scope-sync';
+
+document.addEventListener('deviceready', async () => {
+  await window.SentrySdk?.start({ dsn: '...' });
+  bindScope(Sentry.getGlobalScope(), { onError: (error, method) => console.warn(method, error) });
+  bindScope(Sentry.getIsolationScope());
+  bindScope(Sentry.getCurrentScope());
+});
+```
+
+| The scope's method | What the plugin is sent |
+| --- | --- |
+| `setUser(user \| null)` | [`setUser`](#setUser), `null` for a removal. The plugin keeps `id`, `email` and `username` |
+| `setTag(key, value)`, `setTags(tags)` | [`setTags`](#setTags). `null` and `undefined` remove the tag; a value the plugin would refuse (`NaN`, a BigInt, an object) is sent as its text |
+| `setExtra(key, value)`, `setExtras(extras)` | `setExtras`. An extra that cannot be made JSON (a cycle, a BigInt, a function) is left out and goes to `onError` |
+| `setContext(key, context \| null)` | [`setContext`](#setContext), as plain JSON. A context that cannot be made JSON goes to `onError` |
+| `addBreadcrumb(crumb, max)` | `addBreadcrumb` with the crumb the scope ended with, its timestamp included: `type`, `category`, `message`, `level`, `timestamp` and `data` as plain JSON. Nothing is sent when the scope took no crumb (a `max` of 0) |
+| `clearBreadcrumbs()` | `clearBreadcrumbs` |
+
+- The scope behaves as it did. The original method runs first, its answer is the one returned, and whatever happens on the way to native, a
+  refusal by the plugin included, never reaches the page: it goes to `onError(error, method)` when you gave one.
+- `window.SentrySdk` is looked up at every call, so binding before `deviceready` is fine, and in a browser, where there is no plugin, nothing
+  is sent. Give `sdk` in the options to forward to something else, a test double for one.
+- Binding a scope twice does nothing the second time. The function `bindScope` returns takes the wrapping off again, and leaves a method that
+  somebody wrapped after it.
+- A scope made by `withScope` is a copy that does not carry the wrapping, and `scope.update(...)` does not go through the setters, so
+  neither is sent. The global, isolation and current scopes are where an app puts the user and the tags.
+- A scope without one of the methods is left without it, and a plugin without one of the calls is not sent it.
+
 ## What arrives, and what does not
 
 Native events carry the native SDK's own device and OS contexts plus whatever you set through this
