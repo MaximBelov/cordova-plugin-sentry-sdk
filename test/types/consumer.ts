@@ -26,7 +26,21 @@ async function app(): Promise<void> {
     enableCaptureFailedRequests: false,
     enableMetricKit: true,
     allowCrash: false,
+    debug: false,
+    enableNativeCrashHandling: true,
+    enableWatchdogTerminationTracking: true,
+    sendDefaultPii: false,
+    maxBreadcrumbs: 100,
+    sampleRate: 0.5,
+    attachStacktrace: true,
+    attachThreads: false,
+    sessionTrackingIntervalMillis: 30000,
+    enableNdkScopeSync: true,
   });
+  // @ts-expect-error a start option has its own type: sampleRate is a number
+  await sdk.start({ dsn: 'x', sampleRate: '0.5' });
+  // @ts-expect-error debug is a boolean
+  await sdk.start({ dsn: 'x', debug: 'yes' });
   // @ts-expect-error start answers `started` or `already started`, never `set`
   const wrongStart: 'set' = await sdk.start({ dsn: 'x' });
   // @ts-expect-error a dsn is required
@@ -48,14 +62,20 @@ async function app(): Promise<void> {
   // @ts-expect-error a context is an object or null
   await sdk.setContext('account', 'text');
 
+  const device: { osName: string; osVersion: string; deviceModel: string; appRelease: string; appBuild: string } = await sdk.getDeviceInfo();
+  // @ts-expect-error getDeviceInfo takes no argument
+  await sdk.getDeviceInfo('ios');
+  // @ts-expect-error the field is osVersion
+  void device.osversion;
+
   // The process is gone, so the promise never settles: `never`, not `void`.
   const crashed: never = await sdk.crash();
 
-  void [started, wrongStart, user, cleared, tags, wrongTags, context, removed, crashed];
+  void [started, wrongStart, user, cleared, tags, wrongTags, context, removed, device, crashed];
 }
 
 // The scope helper takes a scope by its shape, the plugin or a double of it, and answers the function that takes the wrapping off.
-const options: BindScopeOptions = { sdk: window.SentrySdk as SentrySdkLike, onError: (error: unknown, method: string) => void [error, method] };
+const options: BindScopeOptions = { sdk: window.SentrySdk, onError: (error: unknown, method: string) => void [error, method] };
 const unbind: () => void = bindScope({ setTag: () => undefined }, options);
 unbind();
 bindScope(new Map());

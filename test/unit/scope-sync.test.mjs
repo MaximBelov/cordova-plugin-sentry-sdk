@@ -294,3 +294,40 @@ test('unbinding puts back a method the scope had of its own, and leaves one that
   undo();
   assert.equal(wrapped.setTag, later, 'the later wrapper is not undone');
 });
+
+test('bound to the plugin\'s own wrapper, every setter reaches native as an action it takes, and the wrapper refuses none of them', async () => {
+  const sent = [];
+  globalThis.cordova = { exec: (success, failure, service, action, args) => sent.push([action, args]) };
+  const wrapper = fileURLToPath(new URL('../../www/SentrySdk.js', import.meta.url));
+  delete require.cache[wrapper];
+  const sdk = require(wrapper);
+  const errors = [];
+  const scope = new FakeScope();
+  bindScope(scope, { sdk, onError: (error, method) => errors.push([method, error]) });
+  try {
+    scope.setUser({ id: '1', email: 'a@b.c' });
+    scope.setTag('a', 'b');
+    scope.setTags({ n: 1, gone: undefined });
+    scope.setExtra('e', { x: 1 });
+    scope.setExtras({ t: 'x', u: undefined });
+    scope.setContext('farm', { animals: 3 });
+    scope.setContext('farm', null);
+    scope.addBreadcrumb({ message: 'm', level: 'log', category: 'c', data: { a: 1 } });
+    scope.clearBreadcrumbs();
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    delete globalThis.cordova;
+  }
+  assert.deepEqual(errors, []);
+  assert.deepEqual(sent, [
+    ['setUser', [{ id: '1', email: 'a@b.c' }]],
+    ['setTags', [{ a: 'b' }]],
+    ['setTags', [{ n: 1, gone: null }]],
+    ['setExtras', [{ e: '{"x":1}' }]],
+    ['setExtras', [{ t: 'x', u: null }]],
+    ['setContext', ['farm', { animals: 3 }]],
+    ['setContext', ['farm', null]],
+    ['addBreadcrumb', [{ category: 'c', message: 'm', level: 'debug', timestamp: 1700000000.5, data: { a: 1 } }]],
+    ['clearBreadcrumbs', []],
+  ]);
+});

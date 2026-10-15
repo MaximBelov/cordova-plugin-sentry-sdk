@@ -50,6 +50,17 @@ function fakeNative() {
       setUser: () => success(!started ? 'queued' : args[0] === null ? 'cleared' : 'set'),
       setTags: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'set' : 'queued') : failure('setTags needs an object')),
       setContext: () => (args[0] ? success(started ? 'set' : 'queued') : failure('setContext needs a key')),
+      addBreadcrumb: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'added' : 'queued') : failure('addBreadcrumb needs an object')),
+      clearBreadcrumbs: () => success('cleared'),
+      setExtras: () => (args[0] && typeof args[0] === 'object' ? success(started ? 'set' : 'queued') : failure('setExtras needs an object')),
+      close: () => {
+        const was = started;
+        started = false;
+        crashAllowed = false;
+        success(was ? 'closed' : 'not running');
+      },
+      isEnabled: () => success(started),
+      getDeviceInfo: () => success({ osName: 'iOS', osVersion: '26.3', deviceModel: 'iPhone17,1', appRelease: '1.0.0', appBuild: '1' }),
       crash: () => (crashAllowed ? undefined : failure('crash is refused: it is for a device test, and start has to be given allowCrash: true')),
     }[action];
     if (!answer) return failure(`unknown action ${action}`);
