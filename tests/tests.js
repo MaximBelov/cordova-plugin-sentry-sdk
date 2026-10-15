@@ -20,7 +20,7 @@ exports.defineAutoTests = function () {
   describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
-      ['start', 'setUser', 'setTags', 'setContext', 'crash'].forEach(function (name) {
+      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'crash'].forEach(function (name) {
         expect(typeof api[name]).toBe('function');
       });
     });
@@ -94,6 +94,34 @@ exports.defineAutoTests = function () {
           expect(cleared).toBe('cleared');
           done();
         }, failWith(done));
+    });
+
+    it('takes breadcrumbs, and clears them', function (done) {
+      running()
+        .then(function () {
+          return api.addBreadcrumb({ category: 'ui.click', message: 'save', level: 'log', data: { id: 1, nested: { ok: true } } });
+        })
+        .then(function (added) {
+          expect(added).toBe('added');
+          return api.clearBreadcrumbs();
+        })
+        .then(function (cleared) {
+          expect(cleared).toBe('cleared');
+          done();
+        }, failWith(done));
+    });
+
+    it('refuses a breadcrumb that is not an object, before native is asked', function (done) {
+      api.addBreadcrumb('click').then(
+        function () {
+          fail('a breadcrumb that is not an object was accepted');
+          done();
+        },
+        function (error) {
+          expect(String(error)).toMatch(/addBreadcrumb needs an object/);
+          done();
+        },
+      );
     });
 
     it('takes tags, with null removing one, and a context', function (done) {
