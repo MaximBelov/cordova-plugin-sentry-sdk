@@ -533,4 +533,26 @@ final class SentrySdkTests: XCTestCase {
         XCTAssertEqual(crashAnswers(), 0)
         XCTAssertEqual(crashes, 1)
     }
+
+    func testCaptureMessageRefusesAnEmptyMessageAMessageThatIsNotTextAndAUnknownLevel() {
+        XCTAssertEqual(status(run("captureMessage", ["", "info"])), CDVCommandStatus_ERROR)
+        XCTAssertEqual(status(run("captureMessage", [7, "info"])), CDVCommandStatus_ERROR)
+        XCTAssertEqual(status(run("captureMessage", ["hello", "loud"])), CDVCommandStatus_ERROR)
+        XCTAssertEqual(status(run("captureMessage", ["hello"])), CDVCommandStatus_ERROR)
+    }
+
+    func testCaptureMessageBeforeStartIsRefusedWithTheReasonAndNotQueued() {
+        let result = run("captureMessage", ["hello", "error"])
+        XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+        XCTAssertTrue((result.message as? String ?? "").contains("running SDK"))
+    }
+
+    func testCaptureMessageAfterStartIsSentAtEachLevel() {
+        run("start", [["dsn": Self.dsn]])
+        for level in ["debug", "info", "warning", "error", "fatal"] {
+            let result = run("captureMessage", ["hello \(level)", level])
+            XCTAssertEqual(status(result), CDVCommandStatus_OK)
+            XCTAssertEqual(result.message as? String, "sent")
+        }
+    }
 }
