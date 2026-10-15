@@ -46,6 +46,10 @@ async function app(): Promise<void> {
   // @ts-expect-error a context is an object or null
   await sdk.setContext('account', 'text');
 
+  const captured: 'sent' = await sdk.captureMessage('boom', 'error');
+  // @ts-expect-error a level is one of the five Sentry names
+  await sdk.captureMessage('boom', 'loud');
+
   // The process is gone, so the promise never settles: `never`, not `void`.
   const crashed: never = await sdk.crash();
 

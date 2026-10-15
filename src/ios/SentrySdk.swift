@@ -140,6 +140,35 @@ import Sentry
         reply(command, ok: true, applied ? "set" : "queued")
     }
 
+    /// Sends a message event. Not queued: a message needs the SDK running, so a call before `start` is answered with an error, and the
+    /// page knows the message was not sent.
+    @objc(captureMessage:)
+    func captureMessage(_ command: CDVInvokedUrlCommand) {
+        guard let message = command.argument(at: 0) as? String, !message.isEmpty else {
+            reply(command, ok: false, "captureMessage needs a message")
+            return
+        }
+        let level: SentryLevel
+        switch command.argument(at: 1) as? String {
+        case "debug": level = .debug
+        case "info": level = .info
+        case "warning": level = .warning
+        case "error": level = .error
+        case "fatal": level = .fatal
+        default:
+            reply(command, ok: false, "captureMessage: the level has to be debug, info, warning, error or fatal")
+            return
+        }
+        guard SentrySDK.isEnabled else {
+            reply(command, ok: false, "captureMessage needs a running SDK: start has to be answered first")
+            return
+        }
+        SentrySDK.capture(message: message) { scope in
+            scope.setLevel(level)
+        }
+        reply(command, ok: true, "sent")
+    }
+
     /// For a device probe: the process goes down, so this never answers. Refused unless `start` allowed it.
     @objc(crash:)
     func crash(_ command: CDVInvokedUrlCommand) {

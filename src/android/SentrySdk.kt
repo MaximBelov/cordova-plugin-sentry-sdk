@@ -1,6 +1,7 @@
 package io.github.maximbelov.sentrysdk
 
 import io.sentry.Sentry
+import io.sentry.SentryLevel
 import io.sentry.android.core.SentryAndroid
 import io.sentry.protocol.User
 import org.apache.cordova.CallbackContext
@@ -21,6 +22,15 @@ class SentrySdk : CordovaPlugin() {
     // page set before the SDK was running: the last change of each key, applied by `start`.
     private val pending = LinkedHashMap<String, () -> Unit>()
 
+    // The severities a page may name, as Sentry spells them.
+    private val SENTRY_LEVELS = mapOf(
+        "debug" to SentryLevel.DEBUG,
+        "info" to SentryLevel.INFO,
+        "warning" to SentryLevel.WARNING,
+        "error" to SentryLevel.ERROR,
+        "fatal" to SentryLevel.FATAL,
+    )
+
     // `crash` takes the process down, so it is refused unless the page said so in an accepted `start`: that it is a device test. It is the
     // page's word and not a lock, so it keeps a stray call from ending the app, not a script that can call `start` itself.
     private var crashAllowed = false
@@ -31,6 +41,7 @@ class SentrySdk : CordovaPlugin() {
             "setUser" -> setUser(args.optJSONObject(0), callbackContext)
             "setTags" -> setTags(args.optJSONObject(0), callbackContext)
             "setContext" -> setContext(args.optString(0), args.optJSONObject(1), callbackContext)
+            "captureMessage" -> captureMessage(args.optString(0), args.optString(1), callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -127,6 +138,28 @@ class SentrySdk : CordovaPlugin() {
             }
         }
         callbackContext.success(if (applied) "set" else "queued")
+    }
+
+    /**
+     * Sends a message event. Not queued: a message needs the SDK running, so a call before `start` is answered with an error,
+     * and the page knows the message was not sent.
+     */
+    private fun captureMessage(message: String, level: String, callbackContext: CallbackContext) {
+        if (message.isEmpty()) {
+            callbackContext.error("captureMessage needs a message")
+            return
+        }
+        val sentryLevel = SENTRY_LEVELS[level]
+        if (sentryLevel == null) {
+            callbackContext.error("captureMessage: the level has to be debug, info, warning, error or fatal")
+            return
+        }
+        if (!Sentry.isEnabled()) {
+            callbackContext.error("captureMessage needs a running SDK: start has to be answered first")
+            return
+        }
+        Sentry.captureMessage(message, sentryLevel)
+        callbackContext.success("sent")
     }
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */

@@ -72,6 +72,14 @@ export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 /** What `setTags` and `setContext` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
 
+/** The severity of a message, as Sentry names them. */
+export type SentrySdkLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
+
+/** What `captureMessage` answers when the message was handed to the SDK. */
+export type SentrySdkCaptureAnswer = 'sent';
+
+const LEVELS: readonly string[] = ['debug', 'info', 'warning', 'error', 'fatal'];
+
 const call = <T>(action: string, ...args: unknown[]) =>
   new Promise<T>((resolve, reject) => cordova.exec((r) => resolve(r as T), reject, SERVICE, action, args));
 
@@ -132,6 +140,16 @@ const checkContext = (key: string, value: Record<string, unknown> | null): [stri
   return [key, value];
 };
 
+const checkCapture = (message: string, level: SentrySdkLevel): [string, SentrySdkLevel] => {
+  if (typeof message !== 'string' || message === '') {
+    return refuse('captureMessage needs a message');
+  }
+  if (!LEVELS.includes(level)) {
+    return refuse('captureMessage: the level has to be debug, info, warning, error or fatal');
+  }
+  return [message, level];
+};
+
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 export const start = (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', options);
 
@@ -144,6 +162,13 @@ export const setTags = async (tags: Record<string, SentrySdkTagValue>) => call<S
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export const setContext = async (key: string, value: Record<string, unknown> | null) =>
   call<SentrySdkScopeAnswer>('setContext', ...checkContext(key, value));
+
+/**
+ * Sends a message event at the given level (default `info`). Unlike a scope change it is not queued: a message needs the SDK running,
+ * and while it is not, the promise rejects with the reason, so the caller knows it was not sent.
+ */
+export const captureMessage = async (message: string, level: SentrySdkLevel = 'info') =>
+  call<SentrySdkCaptureAnswer>('captureMessage', ...checkCapture(message, level));
 
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export const crash = () => call<never>('crash');

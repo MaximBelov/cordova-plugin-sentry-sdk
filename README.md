@@ -117,6 +117,7 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.setUser](#setUser)
 - [SentrySdk.setTags](#setTags)
 - [SentrySdk.setContext](#setContext)
+- [SentrySdk.captureMessage](#captureMessage)
 - [SentrySdk.crash](#crash)
 
 ## start
@@ -182,6 +183,17 @@ The wrapper settles what the two platforms would otherwise read differently, so 
 that is not an object or `null` is refused too. `setTags` takes an object whose values are strings, finite numbers, booleans or
 `null`, and `setContext` takes a key that is not empty and an object or `null`: an array, a string or no value is refused, where
 native used to take it as a removal. The promise rejects with the reason, a string that names the call, and nothing is sent.
+
+## captureMessage
+
+`captureMessage(message: string, level?: 'debug' | 'info' | 'warning' | 'error' | 'fatal'): Promise<'sent'>`
+
+Sends a message event of the app's own, at `level` (default `info`): `SentrySDK.capture(message:)` on iOS,
+`Sentry.captureMessage` on Android. Use it for a problem the app got over, which a crash report would never show.
+
+Unlike `setUser`, `setTags` and `setContext`, it is not queued. A message needs the SDK running, so a call before
+`start` is answered with the reason and the promise rejects; the page knows it was not sent. An empty message and a level
+other than the five names are refused before they reach native.
 
 ## crash
 

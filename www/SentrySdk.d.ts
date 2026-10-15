@@ -47,6 +47,10 @@ export type SentrySdkStartAnswer = 'started' | 'already started';
 export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 /** What `setTags` and `setContext` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
+/** The severity of a message, as Sentry names them. */
+export type SentrySdkLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
+/** What `captureMessage` answers when the message was handed to the SDK. */
+export type SentrySdkCaptureAnswer = 'sent';
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 export declare const start: (options: SentrySdkStartOptions) => Promise<SentrySdkStartAnswer>;
 /** Sets the user on the native scope, or clears it with `null`. */
@@ -55,5 +59,10 @@ export declare const setUser: (user: SentrySdkUser | null) => Promise<SentrySdkU
 export declare const setTags: (tags: Record<string, SentrySdkTagValue>) => Promise<SentrySdkScopeAnswer>;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export declare const setContext: (key: string, value: Record<string, unknown> | null) => Promise<SentrySdkScopeAnswer>;
+/**
+ * Sends a message event at the given level (default `info`). Unlike a scope change it is not queued: a message needs the SDK running,
+ * and while it is not, the promise rejects with the reason, so the caller knows it was not sent.
+ */
+export declare const captureMessage: (message: string, level?: SentrySdkLevel) => Promise<"sent">;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export declare const crash: () => Promise<never>;

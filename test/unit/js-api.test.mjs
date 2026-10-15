@@ -31,6 +31,8 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setTags', [{ 'farm.region': 'IE', gone: null }], 'setTags', [{ 'farm.region': 'IE', gone: null }]],
     ['setContext', ['farm', { animals: 3 }], 'setContext', ['farm', { animals: 3 }]],
     ['setContext', ['farm', null], 'setContext', ['farm', null]],
+    ['captureMessage', ['boom', 'error'], 'captureMessage', ['boom', 'error']],
+    ['captureMessage', ['hello'], 'captureMessage', ['hello', 'info']],
     ['crash', [], 'crash', []],
   ];
   for (const [method, args, action, sent] of cases) {
@@ -54,9 +56,9 @@ test('the promise resolves with what native answers, and rejects with what nativ
   await assert.rejects(refused, /needs an options object with a dsn/);
 });
 
-test('the module exports exactly the five calls the README documents', () => {
+test('the module exports exactly the six calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['crash', 'setContext', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['captureMessage', 'crash', 'setContext', 'setTags', 'setUser', 'start']);
 });
 
 /**
@@ -88,6 +90,7 @@ test('what native would read differently on the two platforms is refused before 
     ),
     ...[null, [], 'x', 7, { a: {} }, { a: [1] }, { a: Number.NaN }, { a: undefined }].map((tags) => ['setTags', () => api.setTags(tags)]),
     ...[['', {}], [7, {}], ['k', []], ['k', 'x'], ['k', 7], ['k', undefined]].map(([key, value]) => ['setContext', () => api.setContext(key, value)]),
+    ...[[''], [7], ['x', 'loud'], ['x', 'INFO'], ['x', 3]].map(([message, level]) => ['captureMessage', () => api.captureMessage(message, level)]),
   ];
   for (const [call, attempt] of refused) {
     const reason = await outcome(attempt);

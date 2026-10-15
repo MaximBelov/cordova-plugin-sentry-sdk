@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.crash = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
+exports.crash = exports.captureMessage = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
 const SERVICE = 'SentrySdk';
+const LEVELS = ['debug', 'info', 'warning', 'error', 'fatal'];
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
 const refuse = (reason) => {
@@ -57,6 +58,15 @@ const checkContext = (key, value) => {
     }
     return [key, value];
 };
+const checkCapture = (message, level) => {
+    if (typeof message !== 'string' || message === '') {
+        return refuse('captureMessage needs a message');
+    }
+    if (!LEVELS.includes(level)) {
+        return refuse('captureMessage: the level has to be debug, info, warning, error or fatal');
+    }
+    return [message, level];
+};
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
 const start = (options) => call('start', options);
 exports.start = start;
@@ -69,6 +79,12 @@ exports.setTags = setTags;
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 const setContext = async (key, value) => call('setContext', ...checkContext(key, value));
 exports.setContext = setContext;
+/**
+ * Sends a message event at the given level (default `info`). Unlike a scope change it is not queued: a message needs the SDK running,
+ * and while it is not, the promise rejects with the reason, so the caller knows it was not sent.
+ */
+const captureMessage = async (message, level = 'info') => call('captureMessage', ...checkCapture(message, level));
+exports.captureMessage = captureMessage;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;
