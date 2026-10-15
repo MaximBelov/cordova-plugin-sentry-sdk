@@ -234,6 +234,48 @@ class SentrySdkTest {
     }
 
     @Test
+    fun `captureMessage before start is refused with the reason, and not queued`() {
+        val result = run("captureMessage", "hello", "error")
+        assertEquals(PluginResult.Status.ERROR.ordinal, result.status)
+        assertTrue(result.message.contains("running SDK"))
+        run("start", json("dsn" to DSN))
+        var seen = 0
+        Sentry.getCurrentScopes().options.setBeforeSend { _, _ -> seen++; null }
+        Sentry.captureException(RuntimeException("flush the queue, if there were one"))
+        assertEquals("the refused message was not kept for start", 1, seen)
+    }
+
+    @Test
+    fun `captureMessage refuses an empty message and a level it does not know`() {
+        run("start", json("dsn" to DSN))
+        for (args in listOf(arrayOf("", "info"), arrayOf("hello", "loud"), arrayOf("hello", ""), arrayOf("hello", "INFO"))) {
+            val result = run("captureMessage", *args)
+            assertEquals(args.contentToString(), PluginResult.Status.ERROR.ordinal, result.status)
+        }
+    }
+
+    @Test
+    fun `captureMessage sends the message at the level it was given`() {
+        run("start", json("dsn" to DSN))
+        val seen = mutableListOf<Pair<String?, SentryLevel?>>()
+        Sentry.getCurrentScopes().options.setBeforeSend { event, _ ->
+            seen.add(event.message?.formatted to event.level)
+            null
+        }
+        val levels = mapOf(
+            "debug" to SentryLevel.DEBUG,
+            "info" to SentryLevel.INFO,
+            "warning" to SentryLevel.WARNING,
+            "error" to SentryLevel.ERROR,
+            "fatal" to SentryLevel.FATAL,
+        )
+        for (name in levels.keys) {
+            assertEquals("sent", run("captureMessage", "hello $name", name).strMessage)
+        }
+        assertEquals(levels.map { (name, level) -> "hello $name" to level }, seen)
+    }
+
+    @Test
     fun `start without a dsn is refused`() {
         val result = run("start", json("dsn" to ""))
         assertEquals(PluginResult.Status.ERROR.ordinal, result.status)

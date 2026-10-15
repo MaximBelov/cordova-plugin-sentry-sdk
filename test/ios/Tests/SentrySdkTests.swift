@@ -536,16 +536,46 @@ final class SentrySdkTests: XCTestCase {
     }
 
     func testCaptureMessageRefusesAnEmptyMessageAMessageThatIsNotTextAndAUnknownLevel() {
-        XCTAssertEqual(status(run("captureMessage", ["", "info"])), CDVCommandStatus_ERROR)
-        XCTAssertEqual(status(run("captureMessage", [7, "info"])), CDVCommandStatus_ERROR)
-        XCTAssertEqual(status(run("captureMessage", ["hello", "loud"])), CDVCommandStatus_ERROR)
-        XCTAssertEqual(status(run("captureMessage", ["hello"])), CDVCommandStatus_ERROR)
+        // The SDK runs, so what refuses each call is the call itself and not the missing SDK.
+        run("start", [["dsn": Self.dsn]])
+        for args: [Any] in [["", "info"], [7, "info"]] {
+            let result = run("captureMessage", args)
+            XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+            XCTAssertTrue((result.message as? String ?? "").contains("needs a message"))
+        }
+        for args: [Any] in [["hello", "loud"], ["hello"], ["hello", "INFO"]] {
+            let result = run("captureMessage", args)
+            XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
+            XCTAssertTrue((result.message as? String ?? "").contains("the level has to be"))
+        }
     }
 
     func testCaptureMessageBeforeStartIsRefusedWithTheReasonAndNotQueued() {
         let result = run("captureMessage", ["hello", "error"])
         XCTAssertEqual(status(result), CDVCommandStatus_ERROR)
         XCTAssertTrue((result.message as? String ?? "").contains("running SDK"))
+    }
+
+    func testCaptureMessageSendsTheMessageAtTheLevelItWasGiven() {
+        // The SDK is started here, with a hook that sees each event and drops it; the plugin treats an SDK the app started as running.
+        var seen: [(String?, SentryLevel)] = []
+        SentrySDK.start { options in
+            options.dsn = Self.dsn
+            options.beforeSend = { event in
+                seen.append((event.message?.formatted, event.level))
+                return nil
+            }
+        }
+        let levels: [(String, SentryLevel)] = [("debug", .debug), ("info", .info), ("warning", .warning), ("error", .error), ("fatal", .fatal)]
+        for (name, _) in levels {
+            XCTAssertEqual(run("captureMessage", ["hello \(name)", name]).message as? String, "sent")
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while seen.count < levels.count && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertEqual(seen.map { $0.0 }, levels.map { "hello \($0.0)" })
+        XCTAssertEqual(seen.map { $0.1.rawValue }, levels.map { $0.1.rawValue })
     }
 
     func testCaptureMessageAfterStartIsSentAtEachLevel() {
