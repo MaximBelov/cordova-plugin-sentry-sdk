@@ -1,6 +1,8 @@
 // What an app's TypeScript sees of `window.SentrySdk`, written the way an app writes it. test/unit/types.test.mjs compiles this with
 // `tsc --noEmit`: a line has to compile, and a line under `@ts-expect-error` has to FAIL to, so the shipped declarations are held from
 // both sides: too narrow and too wide both break it.
+import { bindScope, type BindScopeOptions, type SentrySdkLike } from '../../www/scope-sync';
+
 export {};
 
 const sdk = window.SentrySdk;
@@ -71,5 +73,17 @@ async function app(): Promise<void> {
 
   void [started, wrongStart, user, cleared, tags, wrongTags, context, removed, device, crashed];
 }
+
+// The scope helper takes a scope by its shape, the plugin or a double of it, and answers the function that takes the wrapping off.
+const options: BindScopeOptions = { sdk: window.SentrySdk, onError: (error: unknown, method: string) => void [error, method] };
+const unbind: () => void = bindScope({ setTag: () => undefined }, options);
+unbind();
+bindScope(new Map());
+// @ts-expect-error a scope is an object
+bindScope('scope');
+// @ts-expect-error onError takes the error and the name of the call
+bindScope({}, { onError: (error: unknown, method: number) => void [error, method] });
+// @ts-expect-error the plugin double takes only the calls of the plugin
+bindScope({}, { sdk: { start: () => undefined } satisfies SentrySdkLike });
 
 void app;
