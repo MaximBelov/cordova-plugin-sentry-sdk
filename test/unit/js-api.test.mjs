@@ -31,6 +31,8 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setTags', [{ 'farm.region': 'IE', gone: null }], 'setTags', [{ 'farm.region': 'IE', gone: null }]],
     ['setContext', ['farm', { animals: 3 }], 'setContext', ['farm', { animals: 3 }]],
     ['setContext', ['farm', null], 'setContext', ['farm', null]],
+    ['addBreadcrumb', [{ category: 'ui.click', message: 'save', level: 'info', data: { id: 1 } }], 'addBreadcrumb', [{ category: 'ui.click', message: 'save', level: 'info', data: { id: 1 } }]],
+    ['clearBreadcrumbs', [], 'clearBreadcrumbs', []],
     ['setExtras', [{ a: 'x', b: null }], 'setExtras', [{ a: 'x', b: null }]],
     ['close', [], 'close', []],
     ['isEnabled', [], 'isEnabled', []],
@@ -59,7 +61,7 @@ test('the promise resolves with what native answers, and rejects with what nativ
 
 test('the module exports exactly the calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['close', 'crash', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['addBreadcrumb', 'clearBreadcrumbs', 'close', 'crash', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
 });
 
 /**
@@ -95,6 +97,43 @@ test('what native would read differently on the two platforms is refused before 
   for (const [call, attempt] of refused) {
     const reason = await outcome(attempt);
     assert.ok(typeof reason === 'string' && reason !== 'sent' && reason.includes(call), `${call} was not refused with a reason: ${reason}`);
+  }
+  assert.equal(calls.length, 0, 'nothing reached native');
+});
+
+test('a breadcrumb is settled before it is sent: the JavaScript levels are native ones, what is not read is dropped, empty fields are left out', () => {
+  const { api, calls } = load();
+  const cases = [
+    [{ level: 'log', message: 'm' }, { level: 'debug', message: 'm' }],
+    [{ level: 'critical' }, { level: 'fatal' }],
+    ...['fatal', 'error', 'warning', 'info', 'debug'].map((level) => [{ level }, { level }]),
+    [{ event_id: 'x', type: 'http', category: 'fetch', message: 'm', timestamp: 1_760_000_000.5 }, { type: 'http', category: 'fetch', message: 'm', timestamp: 1_760_000_000.5 }],
+    [{ type: null, category: undefined, message: 'm', level: null, timestamp: null, data: null }, { message: 'm' }],
+    [{ data: { a: 1, nested: { list: [1, 'two', null], when: new Date(0) }, gone: undefined } }, { data: { a: 1, nested: { list: [1, 'two', null], when: '1970-01-01T00:00:00.000Z' } } }],
+    [{}, {}],
+  ];
+  for (const [given, sent] of cases) {
+    calls.length = 0;
+    api.addBreadcrumb(given);
+    assert.deepEqual(calls[0].args, [sent], JSON.stringify(given));
+  }
+});
+
+test('a breadcrumb native could not read the same on both platforms is refused with the reason, and nothing is sent', async () => {
+  const { api, calls } = load();
+  const cycle = {};
+  cycle.self = cycle;
+  const refused = [
+    ...[null, undefined, 'x', 7, []].map((breadcrumb) => [breadcrumb, /needs an object/]),
+    ...[{ message: 7 }, { category: {} }, { type: true }].map((breadcrumb) => [breadcrumb, /has to be a string/]),
+    ...[{ level: 'loud' }, { level: 7 }, { level: 'toString' }].map((breadcrumb) => [breadcrumb, /level has to be one of/]),
+    ...[{ timestamp: '1' }, { timestamp: Number.NaN }, { timestamp: Number.POSITIVE_INFINITY }].map((breadcrumb) => [breadcrumb, /timestamp has to be a number/]),
+    ...[{ data: [] }, { data: 'x' }, { data: 7 }].map((breadcrumb) => [breadcrumb, /data has to be an object/]),
+    ...[{ data: cycle }, { data: { big: 10n } }].map((breadcrumb) => [breadcrumb, /data cannot be sent as JSON/]),
+  ];
+  for (const [breadcrumb, reason] of refused) {
+    const outcomeOf = await outcome(() => api.addBreadcrumb(breadcrumb));
+    assert.ok(typeof outcomeOf === 'string' && outcomeOf !== 'sent' && outcomeOf.startsWith('addBreadcrumb') && reason.test(outcomeOf), `${String(breadcrumb)}: ${outcomeOf}`);
   }
   assert.equal(calls.length, 0, 'nothing reached native');
 });

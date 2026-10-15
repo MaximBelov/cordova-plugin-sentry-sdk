@@ -72,6 +72,24 @@ export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 /** What `setTags`, `setContext` and `setExtras` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
 
+/** The level of a breadcrumb. `log` and `critical` are the JavaScript SDK's own: native has `debug` and `fatal` instead, and gets those. */
+export type SentrySdkBreadcrumbLevel = 'fatal' | 'critical' | 'error' | 'warning' | 'log' | 'info' | 'debug';
+
+/** A breadcrumb as the JavaScript SDK has it; what the plugin does not read (`event_id`, say) is left out. */
+export interface SentrySdkBreadcrumb {
+  type?: string;
+  category?: string;
+  message?: string;
+  level?: SentrySdkBreadcrumbLevel;
+  /** Seconds since the epoch, as in the JavaScript SDK. Unset, native takes the time of the call. */
+  timestamp?: number;
+  /** Anything JSON can carry, nested or not. */
+  data?: Record<string, unknown>;
+}
+
+/** What `addBreadcrumb` answers: `queued` while the SDK is not running, and `start` adds it. */
+export type SentrySdkBreadcrumbAnswer = 'added' | 'queued';
+
 /** What `close` answers: `closed`, or `not running` when there was no SDK to close. */
 export type SentrySdkCloseAnswer = 'closed' | 'not running';
 
@@ -135,6 +153,59 @@ const checkContext = (key: string, value: Record<string, unknown> | null): [stri
   return [key, value];
 };
 
+const BREADCRUMB_TEXT_FIELDS = ['type', 'category', 'message'] as const;
+const BREADCRUMB_LEVELS: Record<SentrySdkBreadcrumbLevel, string> = {
+  fatal: 'fatal',
+  critical: 'fatal',
+  error: 'error',
+  warning: 'warning',
+  log: 'debug',
+  info: 'info',
+  debug: 'debug',
+};
+
+// The levels `log` and `critical` do not exist natively, so they are mapped here, once, for both platforms. Data is sent as the JSON it
+// is, so a value JSON cannot carry (a cycle, a BigInt) is refused here and not dropped by one platform and kept by the other.
+const checkBreadcrumb = (breadcrumb: SentrySdkBreadcrumb): SentrySdkBreadcrumb => {
+  if (typeof breadcrumb !== 'object' || breadcrumb === null || Array.isArray(breadcrumb)) {
+    return refuse('addBreadcrumb needs an object');
+  }
+  const checked: SentrySdkBreadcrumb = {};
+  for (const field of BREADCRUMB_TEXT_FIELDS) {
+    const value: unknown = breadcrumb[field];
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value !== 'string') {
+      return refuse(`addBreadcrumb: ${field} has to be a string`);
+    }
+    checked[field] = value;
+  }
+  if (breadcrumb.level !== undefined && breadcrumb.level !== null) {
+    if (typeof breadcrumb.level !== 'string' || !Object.prototype.hasOwnProperty.call(BREADCRUMB_LEVELS, breadcrumb.level)) {
+      return refuse(`addBreadcrumb: level has to be one of ${Object.keys(BREADCRUMB_LEVELS).join(', ')}`);
+    }
+    checked.level = BREADCRUMB_LEVELS[breadcrumb.level] as SentrySdkBreadcrumbLevel;
+  }
+  if (breadcrumb.timestamp !== undefined && breadcrumb.timestamp !== null) {
+    if (typeof breadcrumb.timestamp !== 'number' || !Number.isFinite(breadcrumb.timestamp)) {
+      return refuse('addBreadcrumb: timestamp has to be a number of seconds');
+    }
+    checked.timestamp = breadcrumb.timestamp;
+  }
+  if (breadcrumb.data !== undefined && breadcrumb.data !== null) {
+    if (typeof breadcrumb.data !== 'object' || Array.isArray(breadcrumb.data)) {
+      return refuse('addBreadcrumb: data has to be an object');
+    }
+    try {
+      checked.data = JSON.parse(JSON.stringify(breadcrumb.data));
+    } catch {
+      return refuse('addBreadcrumb: data cannot be sent as JSON');
+    }
+  }
+  return checked;
+};
+
 // An extra is text on Android (sentry-android's scope takes a string), so what is settled here, once, is that it is text on both: a string
 // stays as it is, `null` and `undefined` remove the extra (an undefined value would be dropped by the JSON the bridge sends, and the key
 // with it), and anything else is its JSON.
@@ -176,6 +247,16 @@ export const setTags = async (tags: Record<string, SentrySdkTagValue>) => call<S
 /** Sets a context (a named object) on the native scope, or removes it with `null`. */
 export const setContext = async (key: string, value: Record<string, unknown> | null) =>
   call<SentrySdkScopeAnswer>('setContext', ...checkContext(key, value));
+
+/**
+ * Adds a breadcrumb to the native scope, so a native crash carries what the page did before it. While the SDK is not running it is
+ * kept, in order and up to the last hundred, and `start` adds them.
+ */
+export const addBreadcrumb = async (breadcrumb: SentrySdkBreadcrumb) =>
+  call<SentrySdkBreadcrumbAnswer>('addBreadcrumb', checkBreadcrumb(breadcrumb));
+
+/** Clears the native scope's breadcrumbs, and the ones kept for `start`. */
+export const clearBreadcrumbs = () => call<'cleared'>('clearBreadcrumbs');
 
 /**
  * Sets extras on the native scope: each value is its text on both platforms (a string as it is, anything else as JSON), and `null` or
