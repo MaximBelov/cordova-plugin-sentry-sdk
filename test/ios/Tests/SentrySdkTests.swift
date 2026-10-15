@@ -194,6 +194,74 @@ final class SentrySdkTests: XCTestCase {
         XCTAssertEqual(explicit.appHangTimeoutInterval, Options().appHangTimeoutInterval, "unset keeps the SDK's default")
     }
 
+    /// The SDK's options as `start` would leave them for these page options.
+    private func configured(_ pairs: [String: Any] = [:]) -> Options {
+        let options = Options()
+        SentrySdk.configure(options, from: ["dsn": Self.dsn].merging(pairs) { _, new in new })
+        return options
+    }
+
+    func testStartOptionsThePageDoesNotGiveLeaveTheSdkDefaults() {
+        let fresh = Options()
+        let options = configured()
+        XCTAssertEqual(options.debug, fresh.debug)
+        XCTAssertEqual(options.enableCrashHandler, fresh.enableCrashHandler)
+        XCTAssertEqual(options.enableWatchdogTerminationTracking, fresh.enableWatchdogTerminationTracking)
+        XCTAssertEqual(options.sendDefaultPii, fresh.sendDefaultPii)
+        XCTAssertEqual(options.maxBreadcrumbs, fresh.maxBreadcrumbs)
+        XCTAssertEqual(options.sampleRate, fresh.sampleRate)
+        XCTAssertEqual(options.attachStacktrace, fresh.attachStacktrace)
+        XCTAssertEqual(options.sessionTrackingIntervalMillis, fresh.sessionTrackingIntervalMillis)
+    }
+
+    func testDebugReachesTheSdk() {
+        XCTAssertTrue(configured(["debug": true]).debug)
+        XCTAssertFalse(configured(["debug": false]).debug)
+    }
+
+    func testEnableNativeCrashHandlingReachesTheCrashHandler() {
+        XCTAssertFalse(configured(["enableNativeCrashHandling": false]).enableCrashHandler)
+        XCTAssertTrue(configured(["enableNativeCrashHandling": true]).enableCrashHandler)
+    }
+
+    func testEnableWatchdogTerminationTrackingReachesTheSdk() {
+        XCTAssertFalse(configured(["enableWatchdogTerminationTracking": false]).enableWatchdogTerminationTracking)
+        XCTAssertTrue(configured(["enableWatchdogTerminationTracking": true]).enableWatchdogTerminationTracking)
+    }
+
+    func testSendDefaultPiiReachesTheSdk() {
+        XCTAssertTrue(configured(["sendDefaultPii": true]).sendDefaultPii)
+        XCTAssertFalse(configured(["sendDefaultPii": false]).sendDefaultPii)
+    }
+
+    func testAttachStacktraceReachesTheSdk() {
+        XCTAssertFalse(configured(["attachStacktrace": false]).attachStacktrace)
+        XCTAssertTrue(configured(["attachStacktrace": true]).attachStacktrace)
+    }
+
+    func testMaxBreadcrumbsReachesTheSdk() {
+        XCTAssertEqual(configured(["maxBreadcrumbs": 7]).maxBreadcrumbs, 7)
+        XCTAssertEqual(configured(["maxBreadcrumbs": 0]).maxBreadcrumbs, 0)
+        XCTAssertEqual(configured(["maxBreadcrumbs": -1]).maxBreadcrumbs, Options().maxBreadcrumbs, "a negative count has no meaning: the SDK's default stays")
+    }
+
+    func testSampleRateReachesTheSdk() {
+        XCTAssertEqual(configured(["sampleRate": 0.25]).sampleRate, 0.25)
+        XCTAssertEqual(configured(["sampleRate": 0]).sampleRate, 0)
+        XCTAssertEqual(configured(["sampleRate": 1]).sampleRate, 1)
+    }
+
+    func testSessionTrackingIntervalMillisReachesTheSdk() {
+        XCTAssertEqual(configured(["sessionTrackingIntervalMillis": 60000]).sessionTrackingIntervalMillis, 60000)
+        XCTAssertEqual(configured(["sessionTrackingIntervalMillis": 0]).sessionTrackingIntervalMillis, 0)
+    }
+
+    func testTheAndroidOnlyOptionsAreAcceptedAndChangeNothing() {
+        let options = configured(["attachThreads": true, "enableNdkScopeSync": false, "enableAnrTracking": false])
+        XCTAssertEqual(options.debug, Options().debug)
+        XCTAssertEqual(options.enableCrashHandler, Options().enableCrashHandler)
+    }
+
     func testSetUserPutsTheUserOnTheScopeAndNullClearsIt() {
         run("start", [["dsn": Self.dsn]])
         XCTAssertEqual(run("setUser", [["id": "42", "email": "user@example.com", "username": "tester"]]).message as? String, "set")

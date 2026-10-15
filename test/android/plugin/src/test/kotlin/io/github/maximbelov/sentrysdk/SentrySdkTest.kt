@@ -3,6 +3,7 @@ package io.github.maximbelov.sentrysdk
 import androidx.appcompat.app.AppCompatActivity
 import io.sentry.Sentry
 import io.sentry.android.core.SentryAndroid
+import io.sentry.android.core.SentryAndroidOptions
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaInterfaceImpl
 import org.apache.cordova.CordovaPreferences
@@ -76,6 +77,108 @@ class SentrySdkTest {
     @Test
     fun `an unknown action is not handled`() {
         assertFalse(plugin.execute("nope", JSONArray(), CallbackContext("x", webView)))
+    }
+
+    /** The SDK's options as `start` would leave them for these page options. */
+    private fun configured(vararg pairs: Pair<String, Any?>): SentryAndroidOptions =
+        SentryAndroidOptions().also { configure(it, json("dsn" to DSN, *pairs)) }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `start options the page does not give leave the SDK's own defaults`() {
+        val fresh = SentryAndroidOptions()
+        val options = configured()
+        assertEquals(fresh.isDebug, options.isDebug)
+        assertEquals(fresh.isSendDefaultPii, options.isSendDefaultPii)
+        assertEquals(fresh.maxBreadcrumbs, options.maxBreadcrumbs)
+        assertEquals(fresh.sampleRate, options.sampleRate)
+        assertEquals(fresh.isAttachStacktrace, options.isAttachStacktrace)
+        assertEquals(fresh.isAttachThreads, options.isAttachThreads)
+        assertEquals(fresh.sessionTrackingIntervalMillis, options.sessionTrackingIntervalMillis)
+        assertEquals(fresh.isEnableScopeSync, options.isEnableScopeSync)
+        assertEquals(fresh.isEnableUncaughtExceptionHandler, options.isEnableUncaughtExceptionHandler)
+        assertEquals(fresh.isAnrEnabled, options.isAnrEnabled)
+        assertEquals(fresh.isEnableNdk, options.isEnableNdk)
+        assertEquals(DSN, options.dsn)
+    }
+
+    @Test
+    fun `start options release, environment and dist reach the SDK, and an empty one is left out`() {
+        val options = configured("release" to "tests@0.1.0", "environment" to "test", "dist" to "7")
+        assertEquals("tests@0.1.0", options.release)
+        assertEquals("test", options.environment)
+        assertEquals("7", options.dist)
+        assertEquals(SentryAndroidOptions().release, configured("release" to "").release)
+    }
+
+    @Test
+    fun `debug reaches the SDK`() {
+        assertTrue(configured("debug" to true).isDebug)
+        assertFalse(configured("debug" to false).isDebug)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `sendDefaultPii reaches the SDK`() {
+        assertTrue(configured("sendDefaultPii" to true).isSendDefaultPii)
+        assertFalse(configured("sendDefaultPii" to false).isSendDefaultPii)
+    }
+
+    @Test
+    fun `attachStacktrace reaches the SDK`() {
+        assertFalse(configured("attachStacktrace" to false).isAttachStacktrace)
+        assertTrue(configured("attachStacktrace" to true).isAttachStacktrace)
+    }
+
+    @Test
+    fun `attachThreads reaches the SDK`() {
+        assertTrue(configured("attachThreads" to true).isAttachThreads)
+        assertFalse(configured("attachThreads" to false).isAttachThreads)
+    }
+
+    @Test
+    fun `maxBreadcrumbs reaches the SDK`() {
+        assertEquals(7, configured("maxBreadcrumbs" to 7).maxBreadcrumbs)
+        assertEquals(0, configured("maxBreadcrumbs" to 0).maxBreadcrumbs)
+    }
+
+    @Test
+    fun `sampleRate reaches the SDK`() {
+        assertEquals(0.25, configured("sampleRate" to 0.25).sampleRate!!, 0.0)
+        assertEquals(0.0, configured("sampleRate" to 0).sampleRate!!, 0.0)
+        assertEquals(1.0, configured("sampleRate" to 1).sampleRate!!, 0.0)
+    }
+
+    @Test
+    fun `sessionTrackingIntervalMillis reaches the SDK`() {
+        assertEquals(60000L, configured("sessionTrackingIntervalMillis" to 60000).sessionTrackingIntervalMillis)
+        assertEquals(0L, configured("sessionTrackingIntervalMillis" to 0).sessionTrackingIntervalMillis)
+    }
+
+    @Test
+    fun `enableNdkScopeSync reaches the SDK`() {
+        assertFalse(configured("enableNdkScopeSync" to false).isEnableScopeSync)
+        assertTrue(configured("enableNdkScopeSync" to true).isEnableScopeSync)
+    }
+
+    @Test
+    fun `enableNativeCrashHandling false turns off the uncaught exception handler, the ANR watch and the NDK, and takes enableAnrTracking with it`() {
+        val off = configured("enableNativeCrashHandling" to false, "enableAnrTracking" to true)
+        assertFalse(off.isEnableUncaughtExceptionHandler)
+        assertFalse(off.isAnrEnabled)
+        assertFalse(off.isEnableNdk)
+        val on = configured("enableNativeCrashHandling" to true)
+        assertTrue(on.isEnableUncaughtExceptionHandler)
+        assertTrue(on.isAnrEnabled)
+        assertTrue(on.isEnableNdk)
+    }
+
+    @Test
+    fun `enableAnrTracking and enableAutoSessionTracking reach the SDK on their own`() {
+        assertFalse(configured("enableAnrTracking" to false).isAnrEnabled)
+        assertTrue(configured("enableAnrTracking" to false).isEnableUncaughtExceptionHandler)
+        assertFalse(configured("enableAutoSessionTracking" to false).isEnableAutoSessionTracking)
+        assertTrue(configured().isEnableAutoSessionTracking)
     }
 
     @Test

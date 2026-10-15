@@ -57,8 +57,42 @@ const checkContext = (key, value) => {
     }
     return [key, value];
 };
+// The two platforms read a value of the wrong type differently (Android's JSON reader makes the text "true" a boolean, Swift's cast
+// drops it), so a start option that is not what it says is refused here, once. An option that is not given is left to the SDK's default.
+const BOOLEAN_OPTIONS = [
+    'debug',
+    'enableNativeCrashHandling',
+    'enableWatchdogTerminationTracking',
+    'sendDefaultPii',
+    'attachStacktrace',
+    'attachThreads',
+    'enableNdkScopeSync',
+];
+const COUNT_OPTIONS = ['maxBreadcrumbs', 'sessionTrackingIntervalMillis'];
+const checkStartOptions = (options) => {
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+        return options;
+    }
+    for (const name of BOOLEAN_OPTIONS) {
+        const value = options[name];
+        if (value !== undefined && typeof value !== 'boolean') {
+            return refuse(`start: ${name} has to be true or false`);
+        }
+    }
+    for (const name of COUNT_OPTIONS) {
+        const value = options[name];
+        if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 0)) {
+            return refuse(`start: ${name} has to be a whole number, 0 or more`);
+        }
+    }
+    const rate = options.sampleRate;
+    if (rate !== undefined && (typeof rate !== 'number' || !(rate >= 0 && rate <= 1))) {
+        return refuse('start: sampleRate has to be a number from 0 to 1');
+    }
+    return options;
+};
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-const start = (options) => call('start', options);
+const start = async (options) => call('start', checkStartOptions(options));
 exports.start = start;
 /** Sets the user on the native scope, or clears it with `null`. */
 const setUser = async (user) => call('setUser', checkUser(user));

@@ -80,6 +80,19 @@ import Sentry
         // Only when the page asks, so the SDK's own default stays otherwise (false in sentry-cocoa 9, true in 10).
         if let metricKit = options["enableMetricKit"] as? Bool { sentryOptions.enableMetricKit = metricKit }
         sentryOptions.enableAutoSessionTracking = (options["enableAutoSessionTracking"] as? Bool) ?? true
+        // What reports a crash. One name on both platforms, which is the SDK's `enableCrashHandler` here.
+        if let crashHandling = options["enableNativeCrashHandling"] as? Bool { sentryOptions.enableCrashHandler = crashHandling }
+        if let watchdog = options["enableWatchdogTerminationTracking"] as? Bool { sentryOptions.enableWatchdogTerminationTracking = watchdog }
+        if let debug = options["debug"] as? Bool { sentryOptions.debug = debug }
+        if let pii = options["sendDefaultPii"] as? Bool { sentryOptions.sendDefaultPii = pii }
+        if let stacktrace = options["attachStacktrace"] as? Bool { sentryOptions.attachStacktrace = stacktrace }
+        // The SDK counts in unsigned integers, and a negative number has no meaning there: the wrapper refuses one, and a call that
+        // reaches here without it leaves the SDK's default.
+        if let count = (options["maxBreadcrumbs"] as? NSNumber).flatMap({ UInt(exactly: $0.intValue) }) { sentryOptions.maxBreadcrumbs = count }
+        if let rate = options["sampleRate"] as? NSNumber { sentryOptions.sampleRate = rate }
+        if let interval = (options["sessionTrackingIntervalMillis"] as? NSNumber).flatMap({ UInt(exactly: $0.intValue) }) {
+            sentryOptions.sessionTrackingIntervalMillis = interval
+        }
     }
 
     @objc(setUser:)

@@ -40,9 +40,38 @@ exports.defineAutoTests = function () {
       );
     });
 
+    it('refuses a start option of the wrong type, before anything native starts', function (done) {
+      api.start({ dsn: DSN, sampleRate: 2 }).then(
+        function () {
+          fail('a sampleRate of 2 was accepted');
+          done();
+        },
+        function (error) {
+          expect(String(error)).toMatch(/sampleRate/);
+          done();
+        },
+      );
+    });
+
     it('starts the native SDK once, and answers a second start without restarting', function (done) {
+      // The options of the SDK, each given the value the SDK has by default, so that what follows runs on the SDK it would have had.
       api
-        .start({ dsn: DSN, release: 'tests@0.1.0', environment: 'test', appHangTimeoutInterval: 7 })
+        .start({
+          dsn: DSN,
+          release: 'tests@0.1.0',
+          environment: 'test',
+          appHangTimeoutInterval: 7,
+          debug: false,
+          enableNativeCrashHandling: true,
+          enableWatchdogTerminationTracking: true,
+          sendDefaultPii: false,
+          maxBreadcrumbs: 100,
+          sampleRate: 1,
+          attachStacktrace: true,
+          attachThreads: false,
+          sessionTrackingIntervalMillis: 30000,
+          enableNdkScopeSync: true,
+        })
         .then(function (first) {
           expect(['started', 'already started']).toContain(first);
           return api.start({ dsn: DSN });

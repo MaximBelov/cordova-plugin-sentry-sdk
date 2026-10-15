@@ -47,6 +47,30 @@ export interface SentrySdkStartOptions {
   enableAutoSessionTracking?: boolean;
   /** Default true (Android): an ANR is reported as an event. */
   enableAnrTracking?: boolean;
+  /** Default false. The SDK writes what it is doing to the system log (logcat, the Xcode console). */
+  debug?: boolean;
+  /**
+   * Default true. False turns the crash handling off, which is what reports a crash: the uncaught exception handler, the ANR watch and the
+   * NDK integration on Android, the crash handler on iOS. The plugin then reports what the page hands it and nothing the process dies of.
+   * It also takes `enableAnrTracking` with it on Android.
+   */
+  enableNativeCrashHandling?: boolean;
+  /** Default true (iOS): the app was killed by the system, with no crash, because it was out of memory or hung. */
+  enableWatchdogTerminationTracking?: boolean;
+  /** Default false, the SDKs' own: the user's IP address and what else the SDK adds about the user, beyond what `setUser` sets. */
+  sendDefaultPii?: boolean;
+  /** How many breadcrumbs the scope keeps, the SDKs' default 100. */
+  maxBreadcrumbs?: number;
+  /** The share of error events that is sent, 0 to 1, default 1. */
+  sampleRate?: number;
+  /** Default true: an event without an exception gets the stack trace of where it was captured. */
+  attachStacktrace?: boolean;
+  /** Default false (Android): every event carries the stack traces of all the threads. */
+  attachThreads?: boolean;
+  /** How long the app has to be in the background before the session is over, in milliseconds. The SDKs' default 30000. */
+  sessionTrackingIntervalMillis?: number;
+  /** Default true (Android, with the NDK artifact): the scope is kept in sync with the NDK's, so a crash in native code has the user and the tags. */
+  enableNdkScopeSync?: boolean;
   /**
    * Default false: `crash()` is refused. It takes the process down, so it is for a device test, and the page has to say so here, which
    * keeps a stray call from ending the app. The last accepted `start` decides.
@@ -132,8 +156,44 @@ const checkContext = (key: string, value: Record<string, unknown> | null): [stri
   return [key, value];
 };
 
+// The two platforms read a value of the wrong type differently (Android's JSON reader makes the text "true" a boolean, Swift's cast
+// drops it), so a start option that is not what it says is refused here, once. An option that is not given is left to the SDK's default.
+const BOOLEAN_OPTIONS = [
+  'debug',
+  'enableNativeCrashHandling',
+  'enableWatchdogTerminationTracking',
+  'sendDefaultPii',
+  'attachStacktrace',
+  'attachThreads',
+  'enableNdkScopeSync',
+] as const;
+const COUNT_OPTIONS = ['maxBreadcrumbs', 'sessionTrackingIntervalMillis'] as const;
+
+const checkStartOptions = (options: SentrySdkStartOptions): SentrySdkStartOptions => {
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    return options;
+  }
+  for (const name of BOOLEAN_OPTIONS) {
+    const value: unknown = options[name];
+    if (value !== undefined && typeof value !== 'boolean') {
+      return refuse(`start: ${name} has to be true or false`);
+    }
+  }
+  for (const name of COUNT_OPTIONS) {
+    const value: unknown = options[name];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isInteger(value) || value < 0)) {
+      return refuse(`start: ${name} has to be a whole number, 0 or more`);
+    }
+  }
+  const rate: unknown = options.sampleRate;
+  if (rate !== undefined && (typeof rate !== 'number' || !(rate >= 0 && rate <= 1))) {
+    return refuse('start: sampleRate has to be a number from 0 to 1');
+  }
+  return options;
+};
+
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-export const start = (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', options);
+export const start = async (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', checkStartOptions(options));
 
 /** Sets the user on the native scope, or clears it with `null`. */
 export const setUser = async (user: SentrySdkUser | null) => call<SentrySdkUserAnswer>('setUser', checkUser(user));

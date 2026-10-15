@@ -2,6 +2,7 @@ package io.github.maximbelov.sentrysdk
 
 import io.sentry.Sentry
 import io.sentry.android.core.SentryAndroid
+import io.sentry.android.core.SentryAndroidOptions
 import io.sentry.protocol.User
 import org.apache.cordova.CallbackContext
 import org.apache.cordova.CordovaPlugin
@@ -52,14 +53,7 @@ class SentrySdk : CordovaPlugin() {
             return
         }
         try {
-            SentryAndroid.init(cordova.context) { sentryOptions ->
-                sentryOptions.dsn = dsn
-                options.optString("release").takeIf { it.isNotEmpty() }?.let { sentryOptions.release = it }
-                options.optString("environment").takeIf { it.isNotEmpty() }?.let { sentryOptions.environment = it }
-                options.optString("dist").takeIf { it.isNotEmpty() }?.let { sentryOptions.dist = it }
-                sentryOptions.isEnableAutoSessionTracking = options.optBoolean("enableAutoSessionTracking", true)
-                sentryOptions.isAnrEnabled = options.optBoolean("enableAnrTracking", true)
-            }
+            SentryAndroid.init(cordova.context) { configure(it, options) }
         } catch (error: IllegalArgumentException) {
             // A dsn that does not parse: the SDK refuses to start, and so does the plugin, so the page can try again with a good one.
             callbackContext.error("start was refused: ${error.message}")
@@ -151,4 +145,34 @@ class SentrySdk : CordovaPlugin() {
             JSONObject.NULL, null -> null
             else -> value
         }
+}
+
+/**
+ * The options the page passes, applied to the SDK's. On its own so the mapping can be tested without a running SDK. An option the page
+ * does not give is left to the SDK's own default, except where the README says the plugin's differs.
+ *
+ * `sendDefaultPii` is deprecated in sentry-android 8.61.0 in favour of its `DataCollection` options, which are finer. It still works, and
+ * it is the one switch sentry-cocoa has too, so the page gets one option on both platforms; hence the suppressed warning.
+ */
+@Suppress("DEPRECATION")
+internal fun configure(sentryOptions: SentryAndroidOptions, options: JSONObject) {
+    sentryOptions.dsn = options.optString("dsn")
+    options.optString("release").takeIf { it.isNotEmpty() }?.let { sentryOptions.release = it }
+    options.optString("environment").takeIf { it.isNotEmpty() }?.let { sentryOptions.environment = it }
+    options.optString("dist").takeIf { it.isNotEmpty() }?.let { sentryOptions.dist = it }
+    sentryOptions.isEnableAutoSessionTracking = options.optBoolean("enableAutoSessionTracking", true)
+    // What reports a crash: the handler for an uncaught exception, the ANR watch and the NDK integration. One option turns the three off, and
+    // it takes `enableAnrTracking` with it, which is how a page that wants no crash handling gets none.
+    val crashHandling = options.optBoolean("enableNativeCrashHandling", true)
+    sentryOptions.isEnableUncaughtExceptionHandler = crashHandling
+    sentryOptions.isAnrEnabled = crashHandling && options.optBoolean("enableAnrTracking", true)
+    sentryOptions.isEnableNdk = crashHandling
+    if (options.has("enableNdkScopeSync")) sentryOptions.isEnableScopeSync = options.optBoolean("enableNdkScopeSync")
+    if (options.has("debug")) sentryOptions.isDebug = options.optBoolean("debug")
+    if (options.has("sendDefaultPii")) sentryOptions.isSendDefaultPii = options.optBoolean("sendDefaultPii")
+    if (options.has("attachStacktrace")) sentryOptions.isAttachStacktrace = options.optBoolean("attachStacktrace")
+    if (options.has("attachThreads")) sentryOptions.isAttachThreads = options.optBoolean("attachThreads")
+    if (options.has("maxBreadcrumbs")) sentryOptions.maxBreadcrumbs = options.optInt("maxBreadcrumbs")
+    if (options.has("sampleRate")) sentryOptions.sampleRate = options.optDouble("sampleRate")
+    if (options.has("sessionTrackingIntervalMillis")) sentryOptions.sessionTrackingIntervalMillis = options.optLong("sessionTrackingIntervalMillis")
 }

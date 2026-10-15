@@ -112,3 +112,53 @@ test('what is fine goes through unchanged, null included', () => {
     ],
   );
 });
+
+const FULL_START = {
+  ...OPTIONS,
+  debug: true,
+  enableNativeCrashHandling: false,
+  enableWatchdogTerminationTracking: false,
+  sendDefaultPii: true,
+  maxBreadcrumbs: 0,
+  sampleRate: 0.25,
+  attachStacktrace: false,
+  attachThreads: true,
+  sessionTrackingIntervalMillis: 60000,
+  enableNdkScopeSync: false,
+};
+
+test('the start options go to native as they are, the ones a platform would read differently excepted', () => {
+  const { api, calls } = load();
+  api.start(FULL_START);
+  api.start({ ...OPTIONS, sampleRate: 1 });
+  api.start({ ...OPTIONS, sampleRate: 0, maxBreadcrumbs: 100 });
+  assert.deepEqual(
+    calls.map((call) => call.args),
+    [[FULL_START], [{ ...OPTIONS, sampleRate: 1 }], [{ ...OPTIONS, sampleRate: 0, maxBreadcrumbs: 100 }]],
+  );
+});
+
+test('a start option of the wrong type is refused before it is sent, with a reason that names the option', async () => {
+  const { api, calls } = load();
+  const wrong = [
+    ...['debug', 'enableNativeCrashHandling', 'enableWatchdogTerminationTracking', 'sendDefaultPii', 'attachStacktrace', 'attachThreads', 'enableNdkScopeSync'].flatMap(
+      (name) => ['true', 1, 0, null, {}].map((value) => [name, value]),
+    ),
+    ...['maxBreadcrumbs', 'sessionTrackingIntervalMillis'].flatMap((name) => ['5', -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, null, true].map((value) => [name, value])),
+    ...['0.5', -0.1, 1.1, 2, Number.NaN, Number.POSITIVE_INFINITY, null, true].map((value) => ['sampleRate', value]),
+  ];
+  for (const [name, value] of wrong) {
+    const reason = await outcome(() => api.start({ ...OPTIONS, [name]: value }));
+    assert.ok(typeof reason === 'string' && reason !== 'sent' && reason.includes(`start: ${name}`), `${name}: ${String(value)} was not refused with its name: ${reason}`);
+  }
+  assert.equal(calls.length, 0, 'nothing reached native');
+});
+
+test('an option that is not given is not sent, so native keeps the SDK default', () => {
+  const { api, calls } = load();
+  api.start(OPTIONS);
+  for (const name of Object.keys(FULL_START)) {
+    if (name in OPTIONS) continue;
+    assert.ok(!(name in calls[0].args[0]), name);
+  }
+});
