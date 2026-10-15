@@ -135,6 +135,10 @@ recreates an Activity the new instance finds the SDK still up. Call it once, aft
 on **every launch**: sentry-cocoa sends a crash report on the next start of the SDK, so an app that
 starts it only sometimes loses the crashes in between.
 
+An option that is not given is left to the SDK, so what each platform does by default is the SDK's own. An option of the wrong type (a
+number as text, a `sampleRate` of 2, a negative count) is **refused** by the JavaScript half, with the option's name in the reason, instead of
+being read one way on Android and another on iOS. An option that a platform does not have is accepted and ignored there.
+
 A `dsn` the SDK cannot parse is **refused**, and the SDK stays off, so the page can try again with a
 good one: the promise rejects with `start was refused: ...`. (sentry-cocoa alone would start without
 a DSN, send nothing and say so only in its log; the plugin checks with the SDK's own parser first.)
@@ -149,6 +153,16 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `enableMetricKit` | the SDK's own: `false` in sentry-cocoa 9, `true` in 10. MetricKit delivers the system's hang, CPU and disk-write diagnostics, and is where sentry-cocoa sends you instead of app hang tracking | iOS |
 | `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`). The SDK watches the requests the app's own code makes, another plugin's HTTP calls for one; a request the page makes is made by WebKit's own processes and is not among them. Network breadcrumbs (`enableNetworkBreadcrumbs`) stay on, as the SDK has them | iOS |
 | `enableAnrTracking` | `true` | Android |
+| `enableNativeCrashHandling` | `true`. `false` turns off what reports a crash: on Android the handler for an uncaught exception, the ANR watch (so `enableAnrTracking` too) and the NDK integration, on iOS the crash handler. The plugin then sends what the page gives it and no crash | both |
+| `enableWatchdogTerminationTracking` | the SDK's `true`. The app was killed by the system, out of memory or hung, with no crash | iOS |
+| `debug` | `false`. The SDK writes what it does to the system log (logcat, the Xcode console) | both |
+| `sendDefaultPii` | `false`. The user's IP address and what else the SDK adds about a user beyond what [`setUser`](#setuser) sets. sentry-android deprecates the option in 8.61.0 for its finer data-collection options and still honours it | both |
+| `maxBreadcrumbs` | the SDK's `100`. A whole number, 0 or more | both |
+| `sampleRate` | `1`. The share of error events that is sent, 0 to 1 | both |
+| `attachStacktrace` | the SDK's `true`. An event that has no exception gets the stack trace of where it was captured | both |
+| `attachThreads` | `false`. Every event carries the stack traces of all the threads | Android |
+| `sessionTrackingIntervalMillis` | the SDK's `30000`. How long the app has to stay in the background for the session to be over. A whole number, 0 or more | both |
+| `enableNdkScopeSync` | `true`. With the NDK artifact: the scope is kept in sync with the NDK's, so a crash in C or C++ code has the user and the tags | Android |
 | `allowCrash` | `false`. [`crash()`](#crash) is refused unless the last accepted `start` gave this, so a stray call cannot end the app | both |
 
 ## setUser
