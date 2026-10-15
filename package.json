@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-sentry-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Starts the native Sentry SDKs (sentry-cocoa, sentry-android) through their public API and keeps the user, tags and contexts your JavaScript SDK sets in sync, so a native crash is reported with the context of the session it happened in",
   "license": "Apache-2.0",
   "cordova": {

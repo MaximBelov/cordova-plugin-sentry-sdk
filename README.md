@@ -123,6 +123,7 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.close](#close)
 - [SentrySdk.isEnabled](#isEnabled)
 - [SentrySdk.getDeviceInfo](#getDeviceInfo)
+- [SentrySdk.captureMessage](#captureMessage)
 - [SentrySdk.crash](#crash)
 
 ## start
@@ -277,6 +278,17 @@ is wrong by a major version. Chrome documents a reduced user agent too, `Android
 hint ([Privacy Sandbox](https://privacysandbox.google.com/protections/user-agent)); that page does not mention Android WebView, and no
 web view was measured on Android here. The JS SDK reads its `os` and `device` contexts from the user agent, so a page that wants the true
 ones can set them from this answer, for instance with `setContext('os', ...)` in its own SDK.
+
+## captureMessage
+
+`captureMessage(message: string, level?: 'debug' | 'info' | 'warning' | 'error' | 'fatal'): Promise<'sent'>`
+
+Sends a message event of the app's own, at `level` (default `info`): `SentrySDK.capture(message:)` on iOS,
+`Sentry.captureMessage` on Android. Use it for a problem the app got over, which a crash report would never show.
+
+Unlike `setUser`, `setTags` and `setContext`, it is not queued. A message needs the SDK running, so a call before
+`start` is answered with the reason and the promise rejects; the page knows it was not sent. An empty message and a level
+other than the five names are refused before they reach native.
 
 ## crash
 

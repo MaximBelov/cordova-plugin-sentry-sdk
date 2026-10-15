@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.crash = exports.getDeviceInfo = exports.isEnabled = exports.close = exports.setExtras = exports.clearBreadcrumbs = exports.addBreadcrumb = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
+exports.crash = exports.captureMessage = exports.getDeviceInfo = exports.isEnabled = exports.close = exports.setExtras = exports.clearBreadcrumbs = exports.addBreadcrumb = exports.setContext = exports.setTags = exports.setUser = exports.start = void 0;
 const SERVICE = 'SentrySdk';
+const LEVELS = ['debug', 'info', 'warning', 'error', 'fatal'];
 const call = (action, ...args) => new Promise((resolve, reject) => cordova.exec((r) => resolve(r), reject, SERVICE, action, args));
 /** A refusal reaches the page the way native's do: the promise rejects, with the reason as a string. */
 const refuse = (reason) => {
@@ -47,6 +48,15 @@ const checkTags = (tags) => {
         }
     }
     return tags;
+};
+const checkCapture = (message, level) => {
+    if (typeof message !== 'string' || message === '') {
+        return refuse('captureMessage needs a message');
+    }
+    if (!LEVELS.includes(level)) {
+        return refuse('captureMessage: the level has to be debug, info, warning, error or fatal');
+    }
+    return [message, level];
 };
 const checkContext = (key, value) => {
     if (typeof key !== 'string' || key === '') {
@@ -213,6 +223,12 @@ exports.isEnabled = isEnabled;
 /** Reads the OS, the device and the app from the system. Needs no running SDK, and changes nothing. */
 const getDeviceInfo = () => call('getDeviceInfo');
 exports.getDeviceInfo = getDeviceInfo;
+/**
+ * Sends a message event at the given level (default `info`). Unlike a scope change it is not queued: a message needs the SDK running,
+ * and while it is not, the promise rejects with the reason, so the caller knows it was not sent.
+ */
+const captureMessage = async (message, level = 'info') => call('captureMessage', ...checkCapture(message, level));
+exports.captureMessage = captureMessage;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 const crash = () => call('crash');
 exports.crash = crash;

@@ -62,6 +62,10 @@ async function app(): Promise<void> {
   // @ts-expect-error a context is an object or null
   await sdk.setContext('account', 'text');
 
+  const captured: 'sent' = await sdk.captureMessage('boom', 'error');
+  // @ts-expect-error a level is one of the five Sentry names
+  await sdk.captureMessage('boom', 'loud');
+
   const device: { osName: string; osVersion: string; deviceModel: string; appRelease: string; appBuild: string } = await sdk.getDeviceInfo();
   // @ts-expect-error getDeviceInfo takes no argument
   await sdk.getDeviceInfo('ios');

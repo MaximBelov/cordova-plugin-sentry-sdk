@@ -20,7 +20,7 @@ exports.defineAutoTests = function () {
   describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
-      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'setExtras', 'close', 'isEnabled', 'getDeviceInfo', 'crash'].forEach(function (name) {
+      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'setExtras', 'close', 'isEnabled', 'getDeviceInfo', 'captureMessage', 'crash'].forEach(function (name) {
         expect(typeof api[name]).toBe('function');
       });
     });
@@ -124,6 +124,51 @@ exports.defineAutoTests = function () {
         expect(info.appBuild.length > 0).toBe(true);
         done();
       }, failWith(done));
+    });
+  });
+
+  describe('captureMessage', function () {
+    it('refuses a level it does not know, and an empty message, before native is asked', function (done) {
+      api
+        .captureMessage('hello', 'loud')
+        .then(
+          function () {
+            fail('a level that is not one of the five was accepted');
+          },
+          function (error) {
+            expect(String(error)).toMatch(/captureMessage/);
+          },
+        )
+        .then(function () {
+          return api.captureMessage('');
+        })
+        .then(
+          function () {
+            fail('an empty message was accepted');
+            done();
+          },
+          function (error) {
+            expect(String(error)).toMatch(/needs a message/);
+            done();
+          },
+        );
+    });
+
+    // Jasmine runs the specs in a random order, so the SDK is started here first, as the other specs do.
+    it('sends a message at each level once the SDK is running', function (done) {
+      api
+        .start({ dsn: DSN })
+        .then(function () {
+          return api.captureMessage('paramedic: info by default');
+        })
+        .then(function (sent) {
+          expect(sent).toBe('sent');
+          return api.captureMessage('paramedic: a warning', 'warning');
+        })
+        .then(function (sent) {
+          expect(sent).toBe('sent');
+          done();
+        }, failWith(done));
     });
   });
 

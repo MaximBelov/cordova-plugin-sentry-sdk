@@ -28,6 +28,15 @@ class SentrySdk : CordovaPlugin() {
     // page set before the SDK was running: the last change of each key, applied by `start`.
     private val pending = LinkedHashMap<String, () -> Unit>()
 
+    // The severities a page may name, as Sentry spells them.
+    private val SENTRY_LEVELS = mapOf(
+        "debug" to SentryLevel.DEBUG,
+        "info" to SentryLevel.INFO,
+        "warning" to SentryLevel.WARNING,
+        "error" to SentryLevel.ERROR,
+        "fatal" to SentryLevel.FATAL,
+    )
+
     // Breadcrumbs are a trail, not a key, so what the page adds before the SDK is running is kept in order, up to the last
     // MAX_PENDING_BREADCRUMBS, and `start` adds them. A clear drops them, as it would drop the SDK's own.
     private val pendingBreadcrumbs = ArrayList<Breadcrumb>()
@@ -48,6 +57,7 @@ class SentrySdk : CordovaPlugin() {
             "close" -> close(callbackContext)
             "isEnabled" -> isEnabled(callbackContext)
             "getDeviceInfo" -> getDeviceInfo(callbackContext)
+            "captureMessage" -> captureMessage(args.optString(0), args.optString(1), callbackContext)
             "crash" -> crash(callbackContext)
             else -> return false
         }
@@ -231,6 +241,28 @@ class SentrySdk : CordovaPlugin() {
             else packages.getPackageInfo(context.packageName, 0)
         val build = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
         callbackContext.success(deviceInfo(Build.VERSION.RELEASE, Build.MODEL, info.versionName, build))
+    }
+
+    /**
+     * Sends a message event. Not queued: a message needs the SDK running, so a call before `start` is answered with an error,
+     * and the page knows the message was not sent.
+     */
+    private fun captureMessage(message: String, level: String, callbackContext: CallbackContext) {
+        if (message.isEmpty()) {
+            callbackContext.error("captureMessage needs a message")
+            return
+        }
+        val sentryLevel = SENTRY_LEVELS[level]
+        if (sentryLevel == null) {
+            callbackContext.error("captureMessage: the level has to be debug, info, warning, error or fatal")
+            return
+        }
+        if (!Sentry.isEnabled()) {
+            callbackContext.error("captureMessage needs a running SDK: start has to be answered first")
+            return
+        }
+        Sentry.captureMessage(message, sentryLevel)
+        callbackContext.success("sent")
     }
 
     /** For a device probe: thrown on the main thread so the process really goes down, as a user's crash would. */

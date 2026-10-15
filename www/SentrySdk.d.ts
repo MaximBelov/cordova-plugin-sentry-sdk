@@ -71,6 +71,10 @@ export type SentrySdkStartAnswer = 'started' | 'already started';
 export type SentrySdkUserAnswer = 'set' | 'cleared' | 'queued';
 /** What `setTags`, `setContext` and `setExtras` answer: `queued` while the SDK is not running, and `start` applies it. */
 export type SentrySdkScopeAnswer = 'set' | 'queued';
+/** The severity of a message, as Sentry names them. */
+export type SentrySdkLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal';
+/** What `captureMessage` answers when the message was handed to the SDK. */
+export type SentrySdkCaptureAnswer = 'sent';
 /** The level of a breadcrumb. `log` and `critical` are the JavaScript SDK's own: native has `debug` and `fatal` instead, and gets those. */
 export type SentrySdkBreadcrumbLevel = 'fatal' | 'critical' | 'error' | 'warning' | 'log' | 'info' | 'debug';
 /** A breadcrumb as the JavaScript SDK has it; what the plugin does not read (`event_id`, say) is left out. */
@@ -133,5 +137,10 @@ export declare const close: () => Promise<SentrySdkCloseAnswer>;
 export declare const isEnabled: () => Promise<boolean>;
 /** Reads the OS, the device and the app from the system. Needs no running SDK, and changes nothing. */
 export declare const getDeviceInfo: () => Promise<SentrySdkDeviceInfo>;
+/**
+ * Sends a message event at the given level (default `info`). Unlike a scope change it is not queued: a message needs the SDK running,
+ * and while it is not, the promise rejects with the reason, so the caller knows it was not sent.
+ */
+export declare const captureMessage: (message: string, level?: SentrySdkLevel) => Promise<"sent">;
 /** Crashes the process natively, when `start` was given `allowCrash: true`. For a device probe, never for the app: the promise never settles, the app is gone. */
 export declare const crash: () => Promise<never>;
