@@ -20,7 +20,7 @@ exports.defineAutoTests = function () {
   describe('SentrySdk (window.SentrySdk)', function () {
     it('is defined, with the whole API', function () {
       expect(api).toBeDefined();
-      ['start', 'setUser', 'setTags', 'setContext', 'getDeviceInfo', 'crash'].forEach(function (name) {
+      ['start', 'setUser', 'setTags', 'setContext', 'addBreadcrumb', 'clearBreadcrumbs', 'setExtras', 'close', 'isEnabled', 'getDeviceInfo', 'crash'].forEach(function (name) {
         expect(typeof api[name]).toBe('function');
       });
     });
@@ -40,15 +40,75 @@ exports.defineAutoTests = function () {
       );
     });
 
+    it('refuses a start option of the wrong type, before anything native starts', function (done) {
+      api.start({ dsn: DSN, sampleRate: 2 }).then(
+        function () {
+          fail('a sampleRate of 2 was accepted');
+          done();
+        },
+        function (error) {
+          expect(String(error)).toMatch(/sampleRate/);
+          done();
+        },
+      );
+    });
+
     it('starts the native SDK once, and answers a second start without restarting', function (done) {
+      // The options of the SDK, each given the value the SDK has by default, so that what follows runs on the SDK it would have had.
       api
-        .start({ dsn: DSN, release: 'tests@0.1.0', environment: 'test', appHangTimeoutInterval: 7 })
+        .start({
+          dsn: DSN,
+          release: 'tests@0.1.0',
+          environment: 'test',
+          appHangTimeoutInterval: 7,
+          debug: false,
+          enableNativeCrashHandling: true,
+          enableWatchdogTerminationTracking: true,
+          sendDefaultPii: false,
+          maxBreadcrumbs: 100,
+          sampleRate: 1,
+          attachStacktrace: true,
+          attachThreads: false,
+          sessionTrackingIntervalMillis: 30000,
+          enableNdkScopeSync: true,
+        })
         .then(function (first) {
           expect(['started', 'already started']).toContain(first);
           return api.start({ dsn: DSN });
         })
         .then(function (second) {
           expect(second).toBe('already started');
+          done();
+        }, failWith(done));
+    });
+  });
+
+  describe('isEnabled and close', function () {
+    // close stops the SDK, and the other specs start it again themselves, so this one leaves it running as it found it.
+    it('says whether the SDK is running, closes it, and starts again after', function (done) {
+      api
+        .start({ dsn: DSN })
+        .then(function () {
+          return api.isEnabled();
+        })
+        .then(function (enabled) {
+          expect(enabled).toBe(true);
+          return api.close();
+        })
+        .then(function (closed) {
+          expect(closed).toBe('closed');
+          return api.isEnabled();
+        })
+        .then(function (enabled) {
+          expect(enabled).toBe(false);
+          return api.close();
+        })
+        .then(function (closedAgain) {
+          expect(closedAgain).toBe('not running');
+          return api.start({ dsn: DSN });
+        })
+        .then(function (restarted) {
+          expect(restarted).toBe('started');
           done();
         }, failWith(done));
     });
@@ -105,6 +165,45 @@ exports.defineAutoTests = function () {
         })
         .then(function (cleared) {
           expect(cleared).toBe('cleared');
+          done();
+        }, failWith(done));
+    });
+
+    it('takes breadcrumbs, and clears them', function (done) {
+      running()
+        .then(function () {
+          return api.addBreadcrumb({ category: 'ui.click', message: 'save', level: 'log', data: { id: 1, nested: { ok: true } } });
+        })
+        .then(function (added) {
+          expect(added).toBe('added');
+          return api.clearBreadcrumbs();
+        })
+        .then(function (cleared) {
+          expect(cleared).toBe('cleared');
+          done();
+        }, failWith(done));
+    });
+
+    it('refuses a breadcrumb that is not an object, before native is asked', function (done) {
+      api.addBreadcrumb('click').then(
+        function () {
+          fail('a breadcrumb that is not an object was accepted');
+          done();
+        },
+        function (error) {
+          expect(String(error)).toMatch(/addBreadcrumb needs an object/);
+          done();
+        },
+      );
+    });
+
+    it('takes extras, with null removing one', function (done) {
+      running()
+        .then(function () {
+          return api.setExtras({ plain: 'text', count: 12, nested: { a: [1, 2] }, gone: null });
+        })
+        .then(function (set) {
+          expect(set).toBe('set');
           done();
         }, failWith(done));
     });

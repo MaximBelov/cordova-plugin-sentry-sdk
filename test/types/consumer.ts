@@ -24,7 +24,21 @@ async function app(): Promise<void> {
     enableCaptureFailedRequests: false,
     enableMetricKit: true,
     allowCrash: false,
+    debug: false,
+    enableNativeCrashHandling: true,
+    enableWatchdogTerminationTracking: true,
+    sendDefaultPii: false,
+    maxBreadcrumbs: 100,
+    sampleRate: 0.5,
+    attachStacktrace: true,
+    attachThreads: false,
+    sessionTrackingIntervalMillis: 30000,
+    enableNdkScopeSync: true,
   });
+  // @ts-expect-error a start option has its own type: sampleRate is a number
+  await sdk.start({ dsn: 'x', sampleRate: '0.5' });
+  // @ts-expect-error debug is a boolean
+  await sdk.start({ dsn: 'x', debug: 'yes' });
   // @ts-expect-error start answers `started` or `already started`, never `set`
   const wrongStart: 'set' = await sdk.start({ dsn: 'x' });
   // @ts-expect-error a dsn is required

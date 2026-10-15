@@ -117,6 +117,11 @@ the reason as a string. Types ship in `types/index.d.ts`.
 - [SentrySdk.setUser](#setUser)
 - [SentrySdk.setTags](#setTags)
 - [SentrySdk.setContext](#setContext)
+- [SentrySdk.addBreadcrumb](#addBreadcrumb)
+- [SentrySdk.clearBreadcrumbs](#clearBreadcrumbs)
+- [SentrySdk.setExtras](#setExtras)
+- [SentrySdk.close](#close)
+- [SentrySdk.isEnabled](#isEnabled)
 - [SentrySdk.getDeviceInfo](#getDeviceInfo)
 - [SentrySdk.crash](#crash)
 
@@ -130,6 +135,10 @@ one per process, and a plugin instance only lives as long as its web view, so af
 recreates an Activity the new instance finds the SDK still up. Call it once, after `deviceready`,
 on **every launch**: sentry-cocoa sends a crash report on the next start of the SDK, so an app that
 starts it only sometimes loses the crashes in between.
+
+An option that is not given is left to the SDK, so what each platform does by default is the SDK's own. An option of the wrong type (a
+number as text, a `sampleRate` of 2, a negative count) is **refused** by the JavaScript half, with the option's name in the reason, instead of
+being read one way on Android and another on iOS. An option that a platform does not have is accepted and ignored there.
 
 A `dsn` the SDK cannot parse is **refused**, and the SDK stays off, so the page can try again with a
 good one: the promise rejects with `start was refused: ...`. (sentry-cocoa alone would start without
@@ -145,6 +154,16 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `enableMetricKit` | the SDK's own: `false` in sentry-cocoa 9, `true` in 10. MetricKit delivers the system's hang, CPU and disk-write diagnostics, and is where sentry-cocoa sends you instead of app hang tracking | iOS |
 | `enableCaptureFailedRequests` | **`false`** (the SDK's default is `true`). The SDK watches the requests the app's own code makes, another plugin's HTTP calls for one; a request the page makes is made by WebKit's own processes and is not among them. Network breadcrumbs (`enableNetworkBreadcrumbs`) stay on, as the SDK has them | iOS |
 | `enableAnrTracking` | `true` | Android |
+| `enableNativeCrashHandling` | `true`. `false` turns off what reports a crash: on Android the handler for an uncaught exception, the ANR watch (so `enableAnrTracking` too) and the NDK integration, on iOS the crash handler. The plugin then sends what the page gives it and no crash | both |
+| `enableWatchdogTerminationTracking` | the SDK's `true`. The app was killed by the system, out of memory or hung, with no crash | iOS |
+| `debug` | `false`. The SDK writes what it does to the system log (logcat, the Xcode console) | both |
+| `sendDefaultPii` | `false`. The user's IP address and what else the SDK adds about a user beyond what [`setUser`](#setuser) sets. sentry-android deprecates the option in 8.61.0 for its finer data-collection options and still honours it | both |
+| `maxBreadcrumbs` | the SDK's `100`. A whole number, 0 or more | both |
+| `sampleRate` | `1`. The share of error events that is sent, 0 to 1 | both |
+| `attachStacktrace` | the SDK's `true`. An event that has no exception gets the stack trace of where it was captured | both |
+| `attachThreads` | `false`. Every event carries the stack traces of all the threads | Android |
+| `sessionTrackingIntervalMillis` | the SDK's `30000`. How long the app has to stay in the background for the session to be over. A whole number, 0 or more | both |
+| `enableNdkScopeSync` | `true`. With the NDK artifact: the scope is kept in sync with the NDK's, so a crash in C or C++ code has the user and the tags | Android |
 | `allowCrash` | `false`. [`crash()`](#crash) is refused unless the last accepted `start` gave this, so a stray call cannot end the app | both |
 
 ## setUser
@@ -172,9 +191,11 @@ Sets a named context (an object) on the native scope, or removes it with `null`.
 
 A scope call made while the SDK is not running would change a scope that the SDK throws away when it
 starts. So the plugin keeps it instead, answers `queued`, and `start` applies it: the **last**
-change of each key (the user, each tag, each context), in no particular order between keys. The
+change of each key (the user, each tag, each context, each extra), in no particular order between keys. The
 order of the calls does not matter, which is what an app needs when the user is known before the
-SDK is up. Nothing is kept for an SDK that never starts.
+SDK is up. Nothing is kept for an SDK that never starts. Breadcrumbs are a trail and not a key, so
+they are kept in the order they came, the last hundred, and [`clearBreadcrumbs`](#clearBreadcrumbs)
+drops them.
 
 ### What is refused
 
@@ -183,6 +204,58 @@ The wrapper settles what the two platforms would otherwise read differently, so 
 that is not an object or `null` is refused too. `setTags` takes an object whose values are strings, finite numbers, booleans or
 `null`, and `setContext` takes a key that is not empty and an object or `null`: an array, a string or no value is refused, where
 native used to take it as a removal. The promise rejects with the reason, a string that names the call, and nothing is sent.
+
+## addBreadcrumb
+
+`addBreadcrumb(breadcrumb): Promise<'added' | 'queued'>`
+
+Adds a breadcrumb to the native scope, so a native crash carries what the page did before it: a route,
+a tap, a request. `breadcrumb` is the JavaScript SDK's, and what is read is `type`, `category`,
+`message`, `level`, `timestamp` (seconds since the epoch, as there; unset, the time of the call) and
+`data` (any JSON, nested). Answers `added`, or `queued` while the SDK is not running: see
+[Before `start`](#before-start).
+
+The levels are the JavaScript SDK's, and `log` and `critical`, which native does not have, are sent as
+`debug` and `fatal`. No level is `info`, on both platforms. Like the rest, a breadcrumb that the two
+platforms would read differently is refused before it is sent: a field that is not text, a level that
+is none of the above, a `timestamp` that is not a number, `data` that is not an object or that JSON
+cannot carry. On iOS a breadcrumb without a `category` has an empty one, which the SDK requires.
+
+The native SDKs add breadcrumbs of their own (lifecycle, system events, network on iOS). The page's
+are not forwarded by themselves: either call this for the ones that matter, or bind the page SDK's
+scope to the plugin, which does it for every breadcrumb.
+
+## clearBreadcrumbs
+
+`clearBreadcrumbs(): Promise<'cleared'>`
+
+Clears the native scope's breadcrumbs, and the ones kept for `start`.
+
+## setExtras
+
+`setExtras({ key: value | null }): Promise<'set' | 'queued'>`
+
+Sets extras on the native scope, the older and flatter relative of a context: prefer [`setContext`](#setContext) for anything with a
+shape. An extra is **text on both platforms** (sentry-android's scope takes only a string), so a string reaches Sentry as it is and
+anything else as its JSON: `12` is `12`, `false` is `false`, `[1,"two"]` and `{"a":1}` are those texts. `null` or `undefined`
+removes the extra. A value JSON cannot carry (a cycle, a BigInt, a function) is refused. Answers `set`, or `queued`: see
+[Before `start`](#before-start), where an extra is a key like a tag.
+
+## close
+
+`close(): Promise<'closed' | 'not running'>`
+
+Stops the native SDK, flushing what it holds (`Sentry.close` / `SentrySDK.close`), for a logout or an environment switch. It
+answers `not running` when there was no SDK to close, and nothing else changes. A later [`start`](#start) starts it again. What the
+page sets while the SDK is down is kept for that start, as before the first one, and `allowCrash` is not: it was the word of the
+`start` that is over, so the next `start` gives it again. Flushing can take as long as the SDK's shutdown timeout, which is why the
+call does not hold up the thread Cordova called it on.
+
+## isEnabled
+
+`isEnabled(): Promise<boolean>`
+
+Whether the native SDK is running, whoever started it: the plugin, or the app's own code.
 
 ## getDeviceInfo
 
@@ -220,9 +293,10 @@ from ending the app. It is not a lock against a script that can call `start` its
 ## What arrives, and what does not
 
 Native events carry the native SDK's own device and OS contexts plus whatever you set through this
-plugin. They are separate from the page's events: no shared trace, no shared breadcrumbs. If that
-matters to you, you want a hybrid SDK such as
-[sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this plugin.
+plugin. They are separate from the page's events: no shared trace, and the page's breadcrumbs only
+when it forwards them ([`addBreadcrumb`](#addBreadcrumb)). If a shared trace matters to you, you
+want a hybrid SDK such as [sentry-capacitor](https://github.com/getsentry/sentry-capacitor), not this
+plugin.
 
 What reaches Sentry through this plugin is what the two SDKs catch in native code: a crash, and on
 iOS a watchdog termination, an app hang (the deprecated option) and, with `enableMetricKit`, the
