@@ -60,6 +60,7 @@ final class SentrySdkTests: XCTestCase {
         case "close": target.close(command)
         case "isEnabled": target.isEnabled(command)
         case "getDeviceInfo": target.getDeviceInfo(command)
+        case "captureMessage": target.captureMessage(command)
         case "crash": target.crash(command)
         default: XCTFail("no such method: \(method)")
         }
