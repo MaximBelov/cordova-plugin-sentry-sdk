@@ -195,6 +195,49 @@ import Sentry
         return breadcrumb
     }
 
+    /// The wrapper has made every value text, or null for a removal.
+    @objc(setExtras:)
+    func setExtras(_ command: CDVInvokedUrlCommand) {
+        guard let extras = command.argument(at: 0) as? [String: Any] else {
+            reply(command, ok: false, "setExtras needs an object")
+            return
+        }
+        var applied = true
+        for (key, value) in extras {
+            let change = {
+                SentrySDK.configureScope { scope in
+                    if let text = value as? String {
+                        scope.setExtra(value: text, key: key)
+                    } else {
+                        scope.removeExtra(key: key)
+                    }
+                }
+            }
+            applied = applyOrKeep("extra:\(key)", change) && applied
+        }
+        reply(command, ok: true, applied ? "set" : "queued")
+    }
+
+    /// `SentrySDK.close` flushes, which can take a while, so it does not run on the thread Cordova called the plugin on. What the page set
+    /// while the SDK was down stays kept for the next `start`, and `allowCrash` does not: it was the word of the `start` that is over.
+    @objc(close:)
+    func close(_ command: CDVInvokedUrlCommand) {
+        commandDelegate.run(inBackground: { [self] in
+            guard SentrySDK.isEnabled else {
+                reply(command, ok: true, "not running")
+                return
+            }
+            SentrySDK.close()
+            crashAllowed = false
+            reply(command, ok: true, "closed")
+        })
+    }
+
+    @objc(isEnabled:)
+    func isEnabled(_ command: CDVInvokedUrlCommand) {
+        commandDelegate.send(CDVPluginResult(status: CDVCommandStatus_OK, messageAs: SentrySDK.isEnabled), callbackId: command.callbackId)
+    }
+
     /// For a device probe: the process goes down, so this never answers. Refused unless `start` allowed it.
     @objc(crash:)
     func crash(_ command: CDVInvokedUrlCommand) {

@@ -33,6 +33,9 @@ test('every method sends its action to the SentrySdk service, with the arguments
     ['setContext', ['farm', null], 'setContext', ['farm', null]],
     ['addBreadcrumb', [{ category: 'ui.click', message: 'save', level: 'info', data: { id: 1 } }], 'addBreadcrumb', [{ category: 'ui.click', message: 'save', level: 'info', data: { id: 1 } }]],
     ['clearBreadcrumbs', [], 'clearBreadcrumbs', []],
+    ['setExtras', [{ a: 'x', b: null }], 'setExtras', [{ a: 'x', b: null }]],
+    ['close', [], 'close', []],
+    ['isEnabled', [], 'isEnabled', []],
     ['crash', [], 'crash', []],
   ];
   for (const [method, args, action, sent] of cases) {
@@ -58,7 +61,7 @@ test('the promise resolves with what native answers, and rejects with what nativ
 
 test('the module exports exactly the calls the README documents', () => {
   const { api } = load();
-  assert.deepEqual(Object.keys(api).sort(), ['addBreadcrumb', 'clearBreadcrumbs', 'crash', 'setContext', 'setTags', 'setUser', 'start']);
+  assert.deepEqual(Object.keys(api).sort(), ['addBreadcrumb', 'clearBreadcrumbs', 'close', 'crash', 'isEnabled', 'setContext', 'setExtras', 'setTags', 'setUser', 'start']);
 });
 
 /**
@@ -131,6 +134,29 @@ test('a breadcrumb native could not read the same on both platforms is refused w
   for (const [breadcrumb, reason] of refused) {
     const outcomeOf = await outcome(() => api.addBreadcrumb(breadcrumb));
     assert.ok(typeof outcomeOf === 'string' && outcomeOf !== 'sent' && outcomeOf.startsWith('addBreadcrumb') && reason.test(outcomeOf), `${String(breadcrumb)}: ${outcomeOf}`);
+  }
+  assert.equal(calls.length, 0, 'nothing reached native');
+});
+
+test('an extra is its text on both platforms: a string as it is, anything else as JSON, null and undefined as a removal', () => {
+  const { api, calls } = load();
+  api.setExtras({ text: 'plain', quoted: '"q"', count: 12, flag: false, list: [1, 'two'], nested: { a: { b: null } }, gone: null, missing: undefined, when: new Date(0) });
+  assert.deepEqual(calls[0].args, [
+    { text: 'plain', quoted: '"q"', count: '12', flag: 'false', list: '[1,"two"]', nested: '{"a":{"b":null}}', gone: null, missing: null, when: '"1970-01-01T00:00:00.000Z"' },
+  ]);
+});
+
+test('extras that native could not read the same on both platforms are refused with the reason, and nothing is sent', async () => {
+  const { api, calls } = load();
+  const cycle = {};
+  cycle.self = cycle;
+  const refused = [
+    ...[null, undefined, 'x', 7, []].map((extras) => [extras, /setExtras needs an object/]),
+    ...[{ a: cycle }, { a: 10n }, { a: () => 1 }, { a: Symbol('s') }].map((extras) => [extras, /the value of a cannot be sent as JSON/]),
+  ];
+  for (const [extras, reason] of refused) {
+    const outcomeOf = await outcome(() => api.setExtras(extras));
+    assert.ok(typeof outcomeOf === 'string' && outcomeOf !== 'sent' && outcomeOf.startsWith('setExtras') && reason.test(outcomeOf), `${String(extras)}: ${outcomeOf}`);
   }
   assert.equal(calls.length, 0, 'nothing reached native');
 });

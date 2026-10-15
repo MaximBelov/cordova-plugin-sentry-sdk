@@ -1,5 +1,6 @@
 = next =
 addBreadcrumb and clearBreadcrumbs: the page's breadcrumbs reach the native scope, so a native crash carries what the page did before it. The JavaScript levels log and critical are sent as debug and fatal, a breadcrumb the two platforms would read differently is refused, and before start they are kept in order, the last hundred, and start adds them
+setExtras, close and isEnabled. An extra is text on both platforms (sentry-android's scope takes only a string): a string as it is, anything else as its JSON, null or undefined removes it. close stops the SDK, flushing it, and answers closed or not running; a start after it starts it again, what the page set meanwhile is kept for that start and allowCrash is not. isEnabled says whether the SDK is running, whoever started it
 
 = 0.2.0 =
 Android: sentry-android 8.61.0 (it was 8.60.0). Its fixes are about callbacks that throw, which this plugin sets none of, and Session Replay, which it never turns on; the NDK module it carries moves from sentry-native 0.17.2 to 0.17.3
