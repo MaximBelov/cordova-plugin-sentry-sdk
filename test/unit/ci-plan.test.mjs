@@ -78,5 +78,7 @@ test('a pull request runs the tests its change needs, and never publishes', () =
 test('ci.yaml can be started by hand, with a publish input, and only main reaches the publish job', () => {
   assert.match(workflow, /^on:\n(?: {2}.*\n)*? {2}workflow_dispatch:/m);
   assert.match(workflow, /workflow_dispatch:\n {4}inputs:\n {6}publish:/);
-  assert.match(workflow, /publish:\n {4}needs: \[plan, ci\]\n {4}if: success\(\) && needs\.plan\.outputs\.publish == 'true'/);
+  assert.match(workflow, /publish:\n {4}needs: \[plan, ci\]\n(?: {4}#.*\n)* {4}if: \$\{\{ !cancelled\(\) && needs\.ci\.result == 'success' && needs\.plan\.outputs\.publish == 'true' \}\}/);
+  // a skipped suite above `ci` must not skip the publish: `success()` would
+  assert.ok(!/publish:\n(?: {4}.*\n)*? {4}if: success\(\)/.test(workflow));
 });

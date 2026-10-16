@@ -119,7 +119,8 @@ jobs:
   # Only a push to main gets here, and only when `ci` is green.
   publish:
     needs: [plan, ci]
-    if: success() && needs.plan.outputs.publish == 'true'
+    # Not `success()`: that is false when any job above `ci` was skipped, and a push to main skips the platform suites on purpose.
+    if: ${{ !cancelled() && needs.ci.result == 'success' && needs.plan.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
