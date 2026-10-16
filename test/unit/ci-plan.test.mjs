@@ -25,7 +25,7 @@ const git = (cwd, ...args) =>
   execFileSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
 
 /** What the plan says for a run started by `event`, in a repository whose last commit changed `changed` since its base. */
-function plan(event, changed = ['README.md']) {
+function plan(event, changed = ['README.md'], extraEnv = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ci-plan-'));
   try {
     git(dir, 'init', '--quiet');
@@ -41,7 +41,7 @@ function plan(event, changed = ['README.md']) {
     git(dir, 'commit', '--quiet', '--message', 'change');
     const output = join(dir, 'github-output');
     writeFileSync(output, '');
-    execFileSync('bash', ['-c', planScript()], { cwd: dir, env: { ...process.env, EVENT: event, BASE: event === 'pull_request' ? base : '', GITHUB_OUTPUT: output }, stdio: 'pipe' });
+    execFileSync('bash', ['-c', planScript()], { cwd: dir, env: { ...process.env, EVENT: event, REF: 'refs/heads/main', PUBLISH_INPUT: '', ...extraEnv, BASE: event === 'pull_request' ? base : '', GITHUB_OUTPUT: output }, stdio: 'pipe' });
     return Object.fromEntries(
       readFileSync(output, 'utf8')
         .trim()
@@ -53,11 +53,18 @@ function plan(event, changed = ['README.md']) {
   }
 }
 
-test('a push to main tests everything and publishes', () => {
-  assert.deepEqual(plan('push'), { ios: 'true', android: 'true', publish: 'true' });
+test('a push to main runs only the fast checks and publishes: the pull request already ran the platform suites', () => {
+  assert.deepEqual(plan('push'), { ios: 'false', android: 'false', publish: 'true' });
 });
 
-test('a run started by hand or by the pins workflow tests everything and never publishes', () => {
+test('a run by hand with publish ticked, on main, publishes at once; on another branch or unticked it does not', () => {
+  const tick = { PUBLISH_INPUT: 'true' };
+  assert.deepEqual(plan('workflow_dispatch', ['README.md'], tick), { ios: 'false', android: 'false', publish: 'true' });
+  assert.deepEqual(plan('workflow_dispatch', ['README.md'], { ...tick, REF: 'refs/heads/pin-sentry-cocoa-99.0.0' }), { ios: 'true', android: 'true', publish: 'false' });
+  assert.deepEqual(plan('workflow_dispatch', ['README.md'], { PUBLISH_INPUT: 'false' }), { ios: 'true', android: 'true', publish: 'false' });
+});
+
+test('a run started by hand or by the pins workflow tests everything and does not publish', () => {
   assert.deepEqual(plan('workflow_dispatch'), { ios: 'true', android: 'true', publish: 'false' });
 });
 
@@ -68,7 +75,8 @@ test('a pull request runs the tests its change needs, and never publishes', () =
   assert.deepEqual(plan('pull_request', ['plugin.xml']), { ios: 'true', android: 'true', publish: 'false' });
 });
 
-test('ci.yaml can be started by hand, and only a push to main reaches the publish job', () => {
+test('ci.yaml can be started by hand, with a publish input, and only main reaches the publish job', () => {
   assert.match(workflow, /^on:\n(?: {2}.*\n)*? {2}workflow_dispatch:/m);
+  assert.match(workflow, /workflow_dispatch:\n {4}inputs:\n {6}publish:/);
   assert.match(workflow, /publish:\n {4}needs: \[plan, ci\]\n {4}if: success\(\) && needs\.plan\.outputs\.publish == 'true'/);
 });
