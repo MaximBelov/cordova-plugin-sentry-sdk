@@ -2,9 +2,11 @@ name: CI
 # One workflow for what a change goes through, parameterised by what triggered it (see `plan`):
 #
 #   a pull request  runs the tests its change needs, and ends in `ci`, the one job a ruleset on main can require;
-#   a push to main  does the same for everything, then publishes the version in package.json to npm as `latest`;
-#   a run by hand   (workflow_dispatch) tests everything and never publishes. It is how a pull request that a workflow opened gets its
-#                   checks: one opened with the repository's token starts no pull_request run, so pins.yaml starts this on its branch.
+#   a push to main  runs only the seconds-long checks (parity, unit) and publishes the version in package.json to npm as `latest`: the
+#                   pull request that was merged already went through the platform suites, so they are not run a second time;
+#   a run by hand   (workflow_dispatch) tests everything and does not publish. It is how a pull request that a workflow opened gets its
+#                   checks: one opened with the repository's token starts no pull_request run, so pins.yaml starts this on its branch;
+#   a run by hand with `publish` ticked, on main, publishes at once with the same fast checks: for when a package is wanted now.
 #
 # npm's trusted publishing is tied to this file name: the package's Settings > Trusted Publisher on npmjs.com names this
 # repository and this file (ci.yaml), with no environment. There is no npm token to expire. A push that keeps the version
@@ -15,6 +17,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the version in package.json now (main only), after the fast checks and without the platform suites'
+        type: boolean
+        default: false
 permissions:
   contents: read
 # A newer push to a pull request cancels the run before it. A push to main never cancels another: it may be the one that publishes.
@@ -53,6 +60,8 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          REF: ${{ github.ref }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
         run: |
           if [ "$EVENT" = "pull_request" ]; then
             files=$(git diff --name-only "$BASE" HEAD)
@@ -65,7 +74,10 @@ jobs:
             ios=true
             android=true
             publish=false
-            if [ "$EVENT" = "push" ]; then
+            # A push to main was a pull request that ran the platform suites; a release by hand skips them on purpose.
+            if [ "$EVENT" = "push" ] || { [ "$EVENT" = "workflow_dispatch" ] && [ "$PUBLISH_INPUT" = "true" ] && [ "$REF" = "refs/heads/main" ]; }; then
+              ios=false
+              android=false
               publish=true
             fi
           fi
