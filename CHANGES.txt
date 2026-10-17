@@ -1,3 +1,6 @@
+= next =
+CI: a published version gets its git tag (v<version>) on the commit it was published from, and a GitHub release with its block of this file; scripts/release.mjs finds both, and back-fills an older version by hand
+
 = 0.3.0 =
 captureMessage(message, level): sends a message event of the app's own at debug, info, warning, error or fatal. It is not queued: a call before start rejects with the reason, on both platforms. An empty message and a level outside the five names are refused before they reach native, as the other calls refuse them
 addBreadcrumb and clearBreadcrumbs: the page's breadcrumbs reach the native scope, so a native crash carries what the page did before it. The JavaScript levels log and critical are sent as debug and fatal, a breadcrumb the two platforms would read differently is refused, and before start they are kept in order, the last hundred, and start adds them
