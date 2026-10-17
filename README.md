@@ -468,7 +468,8 @@ apache/cordova-paramedic (`MaximBelov/cordova-paramedic`) that runs the tests on
 It is used for development only and is not part of the published plugin.
 
 A release is a version bump in `package.json`, `plugin.xml` and `tests/` (both of its manifests), merged to `main`: CI runs the
-tests and publishes the new version to npm through trusted publishing (no stored token).
+tests and publishes the new version to npm through trusted publishing (no stored token), then tags it `v<version>` on the
+commit it was published from and makes a GitHub release of its block of `CHANGES.txt` (`scripts/release.mjs`).
 
 ## Licence
 
