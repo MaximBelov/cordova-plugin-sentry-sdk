@@ -166,6 +166,7 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `sessionTrackingIntervalMillis` | the SDK's `30000`. How long the app has to stay in the background for the session to be over. A whole number, 0 or more | both |
 | `enableNdkScopeSync` | `true`. With the NDK artifact: the scope is kept in sync with the NDK's, so a crash in C or C++ code has the user and the tags | Android |
 | `allowCrash` | `false`. [`crash()`](#crash) is refused unless the last accepted `start` gave this, so a stray call cannot end the app | both |
+| `recordPluginErrors` | `false`. Every plugin result that comes back as an error becomes a breadcrumb, also the ones from before `start`: see [Failed plugin calls as breadcrumbs](#failed-plugin-calls-as-breadcrumbs) | both |
 
 ## setUser
 
@@ -338,6 +339,37 @@ document.addEventListener('deviceready', async () => {
 - A scope made by `withScope` is a copy that does not carry the wrapping, and `scope.update(...)` does not go through the setters, so
   neither is sent. The global, isolation and current scopes are where an app puts the user and the tags.
 - A scope without one of the methods is left without it, and a plugin without one of the calls is not sent it.
+
+## Failed plugin calls as breadcrumbs
+
+A plugin call that fails often reaches the page as a bare message: cordova-android catches what a plugin's `execute` throws and hands the
+page only the exception's message, a `NullPointerException` with no plugin name. With `recordPluginErrors: true`, every failed result of
+every plugin becomes a breadcrumb, so the next event, native or JavaScript, says which plugin failed and how:
+
+```ts
+await window.SentrySdk?.start({ dsn: '...', recordPluginErrors: true });
+```
+
+```json
+{
+  "category": "cordova.plugin",
+  "level": "error",
+  "message": "Camera answered with an error",
+  "data": { "service": "Camera", "status": 9, "error": "No camera available" }
+}
+```
+
+- Both platforms' `cordova.js` hand every native result to `cordova.callbackFromNative`, and the plugin wraps that, once, as its own
+  JavaScript loads. So it sees every plugin, one that kept `cordova/exec` from before included, and the failures from before `start`: they
+  are kept, the last hundred, and added by a `start` with the option, or dropped, with the recording, by a `start` without it.
+- `service` is the plugin's service name (the callback id without its counter), `status` Cordova's status code, and `error` the first
+  value of the answer as text: a string as it is, anything else as its JSON, cut to 200 characters. The arguments of the call are never
+  read. The timestamp is the time of the failure. This plugin's own results are not recorded.
+- The breadcrumb goes to the native scope, so a native crash carries it, and to the first scope given to [`bindScope`](#keeping-the-pages-scope-in-sync)
+  (the global scope in the example there), so the page's events carry it. That scope takes it directly, without the scope sync sending it
+  to native a second time and without the JavaScript SDK's `beforeBreadcrumb`. Without `bindScope`, it is on the native scope only.
+- The result is delivered as it was, to the same callback with the same arguments. A failure while recording is swallowed; an exception
+  thrown by the plugin's own callback still reaches the page.
 
 ## What arrives, and what does not
 

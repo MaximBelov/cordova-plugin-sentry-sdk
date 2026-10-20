@@ -77,6 +77,7 @@ const BOOLEAN_OPTIONS = [
     'attachStacktrace',
     'attachThreads',
     'enableNdkScopeSync',
+    'recordPluginErrors',
 ];
 const COUNT_OPTIONS = ['maxBreadcrumbs', 'sessionTrackingIntervalMillis'];
 const checkStartOptions = (options) => {
@@ -184,8 +185,137 @@ const checkExtras = (extras) => {
     }
     return checked;
 };
+const PLUGIN_ERRORS = Symbol.for('cordova-plugin-sentry-sdk.pluginErrors');
+const WRAPPED = Symbol.for('cordova-plugin-sentry-sdk.callbackFromNative');
+const KEPT = 100;
+const ERROR_LENGTH = 200;
+const pluginErrors = () => {
+    var _a;
+    const global = globalThis;
+    return ((_a = global[PLUGIN_ERRORS]) !== null && _a !== void 0 ? _a : (global[PLUGIN_ERRORS] = { mode: 'waiting', waiting: [], pending: [], scopes: [] }));
+};
+const keep = (list, crumb) => {
+    list.push(crumb);
+    if (list.length > KEPT) {
+        list.shift();
+    }
+};
+/** The first argument of a failed result as text: a string as it is, anything else as its JSON or what it prints as. */
+const errorText = (value) => {
+    if (value === undefined) {
+        return undefined;
+    }
+    let text;
+    if (typeof value === 'string') {
+        text = value;
+    }
+    else {
+        try {
+            text = JSON.stringify(value);
+        }
+        catch (_a) {
+            text = undefined;
+        }
+        if (text === undefined) {
+            try {
+                text = String(value);
+            }
+            catch (_b) {
+                return undefined;
+            }
+        }
+    }
+    return text.slice(0, ERROR_LENGTH);
+};
+// Native gets its copy through the bridge directly, not through `call`: nobody waits for the answer, and a refusal is not the page's.
+const recordPluginError = (crumb) => {
+    try {
+        cordova.exec(() => undefined, () => undefined, SERVICE, 'addBreadcrumb', [crumb]);
+    }
+    catch (_a) {
+        // a recording that fails is not allowed to be the page's problem
+    }
+    const errors = pluginErrors();
+    const scope = errors.scopes[0];
+    if (!scope) {
+        keep(errors.pending, crumb);
+        return;
+    }
+    try {
+        scope(crumb);
+    }
+    catch (_b) {
+        // as above
+    }
+};
+// A callback id is the plugin's service name and a counter (`Camera1234`), on both platforms. What the call was sent is not in a result,
+// and is never looked for: only the service, the status and the first argument of the answer are kept.
+const notePluginError = (callbackId, status, args) => {
+    const errors = pluginErrors();
+    const service = String(callbackId).replace(/\d+$/, '');
+    if (errors.mode === 'off' || service === SERVICE) {
+        return;
+    }
+    const data = { service, status };
+    const error = errorText(Array.isArray(args) ? args[0] : undefined);
+    if (error !== undefined) {
+        data.error = error;
+    }
+    const crumb = {
+        category: 'cordova.plugin',
+        level: 'error',
+        message: `${service} answered with an error`,
+        timestamp: Date.now() / 1000,
+        data,
+    };
+    if (errors.mode === 'waiting') {
+        keep(errors.waiting, crumb);
+    }
+    else {
+        recordPluginError(crumb);
+    }
+};
+// Both platforms' cordova.js hand every native result to `cordova.callbackFromNative`, looked up on the object at each call, so wrapping
+// the property sees every plugin, one that kept `cordova/exec` from before this loaded included. It is wrapped as this module loads, which
+// is before the app can call `start`, and once: a wrapper that is already there is left alone.
+const watchPluginResults = () => {
+    if (typeof cordova === 'undefined' || cordova === null) {
+        return;
+    }
+    const original = cordova.callbackFromNative;
+    if (typeof original !== 'function' || original[WRAPPED]) {
+        return;
+    }
+    const wrapped = function (...args) {
+        if (args[1] === false) {
+            try {
+                notePluginError(args[0], args[2], args[3]);
+            }
+            catch (_a) {
+                // the bridge has to deliver the result whatever happens here
+            }
+        }
+        return original.apply(this, args);
+    };
+    wrapped[WRAPPED] = true;
+    cordova.callbackFromNative = wrapped;
+};
+watchPluginResults();
+/** The last accepted `start` decides: what was kept before it is recorded when the option is on, and dropped with the recording when not. */
+const decidePluginErrors = (options) => {
+    const errors = pluginErrors();
+    const on = typeof options === 'object' && options !== null && options.recordPluginErrors === true;
+    errors.mode = on ? 'on' : 'off';
+    const waiting = errors.waiting.splice(0);
+    if (on) {
+        waiting.forEach(recordPluginError);
+    }
+};
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-const start = async (options) => call('start', checkStartOptions(options));
+const start = async (options) => call('start', checkStartOptions(options)).then((answer) => {
+    decidePluginErrors(options);
+    return answer;
+});
 exports.start = start;
 /** Sets the user on the native scope, or clears it with `null`. */
 const setUser = async (user) => call('setUser', checkUser(user));

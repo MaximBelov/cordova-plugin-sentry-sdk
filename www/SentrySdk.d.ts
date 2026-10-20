@@ -57,6 +57,12 @@ export interface SentrySdkStartOptions {
      * keeps a stray call from ending the app. The last accepted `start` decides.
      */
     allowCrash?: boolean;
+    /**
+     * Default false. Every plugin result that comes back as an error becomes a breadcrumb (category `cordova.plugin`, level `error`), on the
+     * native scope and on the first scope given to `bindScope`. Failures from before `start` are kept and added when this is true, and
+     * dropped when it is not. The call's arguments are never recorded. JavaScript only: native is not told.
+     */
+    recordPluginErrors?: boolean;
 }
 export interface SentrySdkUser {
     id?: string;
@@ -109,7 +115,7 @@ export interface SentrySdkDeviceInfo {
     appBuild: string;
 }
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-export declare const start: (options: SentrySdkStartOptions) => Promise<SentrySdkStartAnswer>;
+export declare const start: (options: SentrySdkStartOptions) => Promise<"already started" | "started">;
 /** Sets the user on the native scope, or clears it with `null`. */
 export declare const setUser: (user: SentrySdkUser | null) => Promise<SentrySdkUserAnswer>;
 /** Sets tags on the native scope; a `null` value removes that tag. */
