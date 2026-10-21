@@ -1,5 +1,6 @@
 = 0.4.0 =
 start takes recordPluginErrors, default false: every plugin result that comes back as an error becomes a breadcrumb (category cordova.plugin, level error, message "<service> answered with an error", data service, status and the first value of the answer as text, cut to 200 characters; never the call's arguments), on the native scope and on the first scope given to bindScope, which takes it without sending it back to native. cordova.callbackFromNative is wrapped once as the plugin's JavaScript loads, so failures before start are kept, the last hundred, and added by a start with the option or dropped by one without. The result is delivered as it was, a failure while recording is swallowed, and this plugin's own results are not recorded
+test/e2e: the demo, built with a demo-only plugin whose every call fails, makes one call fail before start and one after it, with recordPluginErrors on, and the native crash report has to carry both breadcrumbs, in order, on the Android emulator and the iOS simulator
 CI: a published version gets its git tag (v<version>) on the commit it was published from, and a GitHub release with its block of this file; scripts/release.mjs finds both, and back-fills an older version by hand
 
 = 0.3.0 =

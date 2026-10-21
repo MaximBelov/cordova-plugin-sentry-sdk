@@ -1,0 +1,13 @@
+{
+  "name": "sentry-demo-failing-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "For test/e2e only: a plugin whose every call fails, so the demo has a failed plugin result to record",
+  "cordova": {
+    "id": "sentry-demo-failing-plugin",
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}

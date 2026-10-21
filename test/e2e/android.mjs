@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { eventArrived, expectation, sleep, waitFor, writeE2eConfig } from './common.mjs';
+import { addFailingPlugin, eventArrived, expectation, sleep, waitFor, writeE2eConfig } from './common.mjs';
 import { crashProblems } from './expect.mjs';
 import { startIngest } from './ingest.mjs';
 
@@ -55,6 +55,7 @@ function build() {
     run('cordova', ['platform', 'add', 'android', '--nosave']);
   }
   run('node', ['scripts/pack-plugin.mjs']);
+  addFailingPlugin({ demo, env });
   run('cordova', ['build', 'android', '--debug']);
   console.log(`built ${APK}`);
 }
@@ -97,7 +98,7 @@ async function runOnDevice() {
     if (problems.length > 0) {
       throw new Error(`the envelope is not what was sent:\n  ${problems.join('\n  ')}`);
     }
-    console.log(`PASS: sentry.java.android ${sdkVersion}, release ${release}, user, tags, context and exception all arrived`);
+    console.log(`PASS: sentry.java.android ${sdkVersion}, release ${release}, user, tags, context, plugin errors and exception all arrived`);
   } catch (error) {
     console.error(`FAIL: ${error.message}`);
     console.error('--- device log (the SDK and the page)');

@@ -47,10 +47,18 @@
           .catch(function (error) { show(call, 'fail', String(error)); });
       });
     }
-    // The end-to-end scenario (test/e2e): set the user and the context, start the SDK against the DSN it was given, set the tags, crash.
+    // The end-to-end scenario (test/e2e): set the user and the context, make a plugin call fail, start the SDK against the DSN it was given
+    // with recordPluginErrors, set the tags, make a plugin call fail again, crash.
     // The user and the context are set BEFORE the SDK runs, which is the path the plugin keeps for `start`; the tags after it. The launch
     // after the crash only starts the SDK, which is when sentry-android sends what it kept on disk. The flag that tells the two launches apart is in
     // localStorage; if the WebView lost it in the crash the second launch crashes again, and the first report has arrived by then anyway.
+    // A call to demo/failing-plugin, which the end-to-end build installs: it fails with the text it is given, and recordPluginErrors
+    // turns that into a breadcrumb. A call that does not fail is a broken test, not a pass.
+    function failOnPurpose(text) {
+      return new Promise(function (resolve, reject) {
+        cordova.exec(function () { reject(new Error('DemoFailure did not fail')); }, function (error) { show('e2e DemoFailure', 'fail', error); resolve(); }, 'DemoFailure', 'fail', [text]);
+      });
+    }
     function runE2e(cfg) {
       var crashedBefore = false;
       try { crashedBefore = localStorage.getItem('e2e.crashed') === cfg.release; } catch (e) {}
@@ -62,12 +70,14 @@
             .then(function () { return SentrySdk.setContext('account', { animals: 120, premium: true }); })
             .then(function (answer) { show('e2e setContext', 'ok', answer); if (answer !== 'queued') { throw new Error('setContext before start answered ' + answer); } });
       before
-        .then(function () { return SentrySdk.start({ dsn: cfg.dsn, release: cfg.release, environment: cfg.environment, appHangTimeoutInterval: 7, allowCrash: true }); })
+        .then(function () { return crashedBefore ? null : failOnPurpose('failed before start'); })
+        .then(function () { return SentrySdk.start({ dsn: cfg.dsn, release: cfg.release, environment: cfg.environment, appHangTimeoutInterval: 7, allowCrash: true, recordPluginErrors: true }); })
         .then(function (result) { show('e2e start', 'ok', result); })
         .then(function () {
           if (crashedBefore) { return null; }
           return SentrySdk.setTags({ 'account.region': 'IE', premium: true, gone: null })
             .then(function (answer) { show('e2e setTags', 'ok', answer); if (answer !== 'set') { throw new Error('setTags after start answered ' + answer); } })
+            .then(function () { return failOnPurpose('failed after start'); })
             .then(function () {
               try { localStorage.setItem('e2e.crashed', cfg.release); } catch (e) {}
               return new Promise(function (resolve) { setTimeout(resolve, 3000); });
