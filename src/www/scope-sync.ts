@@ -38,6 +38,19 @@ type Method = (...args: unknown[]) => unknown;
 
 const BOUND = new WeakMap<object, () => void>();
 
+/** The plugin's side of `recordPluginErrors`, shared through the global object with www/SentrySdk.js (see `PluginErrors` there). */
+interface PluginErrors {
+  mode: 'waiting' | 'on' | 'off';
+  waiting: Record<string, unknown>[];
+  pending: Record<string, unknown>[];
+  scopes: Array<(crumb: Record<string, unknown>) => void>;
+}
+
+const pluginErrors = (): PluginErrors => {
+  const global = globalThis as unknown as Record<symbol, PluginErrors | undefined>;
+  return (global[Symbol.for('cordova-plugin-sentry-sdk.pluginErrors')] ??= { mode: 'waiting', waiting: [], pending: [], scopes: [] });
+};
+
 const methodOf = (target: object, name: string): Method | undefined => {
   const value = (target as Record<string, unknown>)[name];
   return typeof value === 'function' ? (value as Method) : undefined;
@@ -219,12 +232,14 @@ export function bindScope(scope: object, options: BindScopeOptions = {}): () => 
 
   // Whether the scope took the crumb is its own to say (a limit of 0 takes none), so the crumb that is sent is the one the scope now ends
   // with, and only when that is a new one. That is also the crumb as the scope completed it, with its timestamp.
+  // A crumb the plugin recorded itself (`recordPluginErrors`) was given to native already, so it is added quietly.
+  let quiet = false;
   const lastCrumb = methodOf(scope, 'getLastBreadcrumb');
   wrap('addBreadcrumb', (original) => (crumb, max) => {
     const before = lastCrumb?.call(scope);
     const answer = original.call(scope, crumb, max);
     const after = lastCrumb ? lastCrumb.call(scope) : crumb;
-    if (after !== before) {
+    if (!quiet && after !== before) {
       const sent = breadcrumbOf(after);
       if (sent) {
         forward('addBreadcrumb', sent);
@@ -239,8 +254,40 @@ export function bindScope(scope: object, options: BindScopeOptions = {}): () => 
     return answer;
   });
 
+  // The plugin's failed results go to one scope, the first one bound, so an event does not carry them twice; the ones recorded before it
+  // was bound are added now.
+  const errors = pluginErrors();
+  const takeCrumb = (crumb: Record<string, unknown>): void => {
+    const add = methodOf(scope, 'addBreadcrumb');
+    if (!add) {
+      return;
+    }
+    quiet = true;
+    try {
+      add.call(scope, crumb);
+    } finally {
+      quiet = false;
+    }
+  };
+  if (methodOf(scope, 'addBreadcrumb')) {
+    errors.scopes.push(takeCrumb);
+    if (errors.scopes[0] === takeCrumb) {
+      for (const crumb of errors.pending.splice(0)) {
+        try {
+          takeCrumb(crumb);
+        } catch (error) {
+          report(error, 'addBreadcrumb');
+        }
+      }
+    }
+  }
+
   const unbind = (): void => {
     BOUND.delete(scope);
+    const index = errors.scopes.indexOf(takeCrumb);
+    if (index >= 0) {
+      errors.scopes.splice(index, 1);
+    }
     restores.splice(0).forEach((restore) => restore());
   };
   BOUND.set(scope, unbind);

@@ -1,4 +1,5 @@
 // What the Android and the iOS end-to-end tests share: the DSN the demo is given, what the demo sets and so what has to arrive, and the waiting.
+import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -26,8 +27,28 @@ export function writeE2eConfig({ demo, host, port, release }) {
 }
 
 /**
+ * Installs demo/failing-plugin, whose every call fails, so recordPluginErrors has a failed result to record. Only the end-to-end build
+ * has it: the demo a person builds stays the bare app.
+ */
+export function addFailingPlugin({ demo, env }) {
+  try {
+    execFileSync('cordova', ['plugin', 'rm', 'sentry-demo-failing-plugin', '--nosave'], { cwd: demo, stdio: 'ignore', env });
+  } catch {
+    // not installed yet
+  }
+  execFileSync('cordova', ['plugin', 'add', join(demo, 'failing-plugin'), '--nosave'], { cwd: demo, stdio: 'inherit', env });
+}
+
+/** The two failed results the demo makes, one before `start` and one after it, as their breadcrumbs have to arrive. */
+export const PLUGIN_ERRORS = [
+  { category: 'cordova.plugin', level: 'error', message: 'DemoFailure answered with an error', service: 'DemoFailure', error: 'failed before start' },
+  { category: 'cordova.plugin', level: 'error', message: 'DemoFailure answered with an error', service: 'DemoFailure', error: 'failed after start' },
+];
+
+/**
  * What has to arrive: the same on both platforms except the SDK and the exception. The user and the context are what the demo sets
- * BEFORE it starts the SDK and the tags what it sets after it, so all three paths of the plugin are in it.
+ * BEFORE it starts the SDK and the tags what it sets after it, so all three paths of the plugin are in it. The breadcrumbs of the two failed
+ * plugin calls take both paths of recordPluginErrors: kept until `start`, and recorded after it.
  */
 export function expectation({ release, sdkName, sdkVersion, exception }) {
   return {
@@ -42,6 +63,7 @@ export function expectation({ release, sdkName, sdkVersion, exception }) {
     tags: { 'account.region': 'IE', premium: 'true' },
     absentTags: ['gone'],
     contexts: { account: { animals: 120, premium: true } },
+    pluginErrors: PLUGIN_ERRORS,
   };
 }
 

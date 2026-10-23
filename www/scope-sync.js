@@ -17,6 +17,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bindScope = bindScope;
 const BOUND = new WeakMap();
+const pluginErrors = () => {
+    var _a;
+    var _b;
+    const global = globalThis;
+    return ((_a = global[_b = Symbol.for('cordova-plugin-sentry-sdk.pluginErrors')]) !== null && _a !== void 0 ? _a : (global[_b] = { mode: 'waiting', waiting: [], pending: [], scopes: [] }));
+};
 const methodOf = (target, name) => {
     const value = target[name];
     return typeof value === 'function' ? value : undefined;
@@ -190,12 +196,14 @@ function bindScope(scope, options = {}) {
     });
     // Whether the scope took the crumb is its own to say (a limit of 0 takes none), so the crumb that is sent is the one the scope now ends
     // with, and only when that is a new one. That is also the crumb as the scope completed it, with its timestamp.
+    // A crumb the plugin recorded itself (`recordPluginErrors`) was given to native already, so it is added quietly.
+    let quiet = false;
     const lastCrumb = methodOf(scope, 'getLastBreadcrumb');
     wrap('addBreadcrumb', (original) => (crumb, max) => {
         const before = lastCrumb === null || lastCrumb === void 0 ? void 0 : lastCrumb.call(scope);
         const answer = original.call(scope, crumb, max);
         const after = lastCrumb ? lastCrumb.call(scope) : crumb;
-        if (after !== before) {
+        if (!quiet && after !== before) {
             const sent = breadcrumbOf(after);
             if (sent) {
                 forward('addBreadcrumb', sent);
@@ -208,8 +216,41 @@ function bindScope(scope, options = {}) {
         forward('clearBreadcrumbs');
         return answer;
     });
+    // The plugin's failed results go to one scope, the first one bound, so an event does not carry them twice; the ones recorded before it
+    // was bound are added now.
+    const errors = pluginErrors();
+    const takeCrumb = (crumb) => {
+        const add = methodOf(scope, 'addBreadcrumb');
+        if (!add) {
+            return;
+        }
+        quiet = true;
+        try {
+            add.call(scope, crumb);
+        }
+        finally {
+            quiet = false;
+        }
+    };
+    if (methodOf(scope, 'addBreadcrumb')) {
+        errors.scopes.push(takeCrumb);
+        if (errors.scopes[0] === takeCrumb) {
+            for (const crumb of errors.pending.splice(0)) {
+                try {
+                    takeCrumb(crumb);
+                }
+                catch (error) {
+                    report(error, 'addBreadcrumb');
+                }
+            }
+        }
+    }
     const unbind = () => {
         BOUND.delete(scope);
+        const index = errors.scopes.indexOf(takeCrumb);
+        if (index >= 0) {
+            errors.scopes.splice(index, 1);
+        }
         restores.splice(0).forEach((restore) => restore());
     };
     BOUND.set(scope, unbind);

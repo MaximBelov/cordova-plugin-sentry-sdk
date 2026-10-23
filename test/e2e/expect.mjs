@@ -46,5 +46,19 @@ export function crashProblems(received, want) {
       check(`contexts.${context}.${name}`, event.contexts?.[context]?.[name], value);
     }
   }
+  // A breadcrumb's data is read by the fields the demo knows (the status code is the platform's own), and in the order they were made.
+  const list = Array.isArray(event.breadcrumbs) ? event.breadcrumbs : event.breadcrumbs?.values ?? [];
+  const crumbs = list.filter((crumb) => crumb?.category === 'cordova.plugin');
+  const seen = crumbs.map((crumb) => ({
+    category: crumb.category,
+    level: crumb.level,
+    message: crumb.message,
+    service: crumb.data?.service,
+    error: crumb.data?.error,
+  }));
+  check('the cordova.plugin breadcrumbs', seen, want.pluginErrors ?? []);
+  if (crumbs.some((crumb) => typeof crumb.data?.status !== 'number')) {
+    problems.push(`every cordova.plugin breadcrumb has a numeric data.status, got ${JSON.stringify(crumbs.map((crumb) => crumb.data?.status))}`);
+  }
   return problems;
 }

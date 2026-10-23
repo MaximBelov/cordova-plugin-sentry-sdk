@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
 import { itemsOf, parseEnvelope } from '../e2e/envelope.mjs';
+import { PLUGIN_ERRORS } from '../e2e/common.mjs';
 import { crashProblems } from '../e2e/expect.mjs';
 import { startIngest } from '../e2e/ingest.mjs';
 
@@ -18,6 +19,10 @@ const envelopeText = (event) => {
   ].join('\n');
 };
 
+// A crash carries the breadcrumbs of the two failed plugin calls among the SDK's own, the way sentry-cocoa nests them under `values`.
+const pluginCrumb = ({ service, error, ...crumb }, status = 9) => ({ ...crumb, timestamp: '2026-10-21T10:00:00Z', data: { service, status, error } });
+const crumbs = [{ category: 'app.lifecycle', level: 'info' }, ...PLUGIN_ERRORS.map((crumb) => pluginCrumb(crumb))];
+
 const crash = (overrides = {}) => ({
   release: 'e2e@1',
   environment: 'e2e',
@@ -27,6 +32,7 @@ const crash = (overrides = {}) => ({
   user: { id: '42', email: 'demo@example.com', username: 'demo' },
   tags: { 'account.region': 'IE', premium: 'true' },
   contexts: { account: { animals: 120, premium: true } },
+  breadcrumbs: { values: crumbs },
   ...overrides,
 });
 const want = {
@@ -41,6 +47,7 @@ const want = {
   tags: { 'account.region': 'IE', premium: 'true' },
   absentTags: ['gone'],
   contexts: { account: { animals: 120, premium: true } },
+  pluginErrors: PLUGIN_ERRORS,
 };
 const arrived = (event, extra = {}) => [{ key: 'k', project: '1', envelope: parseEnvelope(envelopeText(event)), ...extra }];
 
@@ -97,4 +104,15 @@ test('a request with the wrong key or project, an unhandled=true crash or no eve
   assert.match(crashProblems(arrived(handled), want).join(), /handled/);
   assert.match(crashProblems(arrived(crash({ release: 'e2e@2' })), want).join(), /no event with release e2e@1 arrived/);
   assert.match(crashProblems([], want).join(), /no event at all/);
+});
+
+test('the breadcrumbs of the failed plugin calls have to arrive, both, in order, of their shape, as a list or under values', () => {
+  assert.deepEqual(crashProblems(arrived(crash({ breadcrumbs: crumbs })), want), [], 'sentry-java sends a plain list');
+  const only = (list) => crashProblems(arrived(crash({ breadcrumbs: { values: list } })), want).join('\n');
+  assert.match(only(crumbs.slice(0, 2)), /cordova\.plugin breadcrumbs/, 'the one after start is missing');
+  assert.match(only([crumbs[0], crumbs[2], crumbs[1]]), /cordova\.plugin breadcrumbs/, 'out of order');
+  assert.match(only([...crumbs, crumbs[2]]), /cordova\.plugin breadcrumbs/, 'one twice');
+  assert.match(only([crumbs[0], crumbs[1], { ...crumbs[2], level: 'info' }]), /cordova\.plugin breadcrumbs/, 'the level');
+  assert.match(only([crumbs[0], crumbs[1], pluginCrumb(PLUGIN_ERRORS[1], '9')]), /numeric data\.status/);
+  assert.match(crashProblems(arrived(crash({ breadcrumbs: undefined })), want).join(), /cordova\.plugin breadcrumbs/, 'none at all');
 });

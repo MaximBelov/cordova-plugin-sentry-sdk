@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- For test/e2e only, never for an app: one service, DemoFailure, that answers every call with an error, the first argument it was
+     given as the message. Neither platform has a plugin of its own that fails on request (an unknown service is answered on Android and
+     only logged on iOS), so the demo installs this one to give recordPluginErrors a failed result to record. -->
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0" id="sentry-demo-failing-plugin" version="1.0.0">
+  <name>DemoFailure</name>
+
+  <platform name="android">
+    <config-file target="res/xml/config.xml" parent="/*">
+      <feature name="DemoFailure">
+        <param name="android-package" value="io.github.maximbelov.sentrydemo.DemoFailure" />
+      </feature>
+    </config-file>
+    <source-file src="src/android/DemoFailure.java" target-dir="src/io/github/maximbelov/sentrydemo" />
+  </platform>
+
+  <platform name="ios">
+    <config-file target="config.xml" parent="/*">
+      <feature name="DemoFailure">
+        <param name="ios-package" value="DemoFailure" />
+      </feature>
+    </config-file>
+    <header-file src="src/ios/DemoFailure.h" />
+    <source-file src="src/ios/DemoFailure.m" />
+  </platform>
+</plugin>

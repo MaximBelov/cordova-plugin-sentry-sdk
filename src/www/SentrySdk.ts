@@ -13,6 +13,7 @@ declare const cordova: {
     action: string,
     args: unknown[],
   ): void;
+  callbackFromNative?: (callbackId: string, isSuccess: boolean, status: number, args: unknown[], keepCallback: boolean) => unknown;
 };
 
 const SERVICE = 'SentrySdk';
@@ -76,6 +77,12 @@ export interface SentrySdkStartOptions {
    * keeps a stray call from ending the app. The last accepted `start` decides.
    */
   allowCrash?: boolean;
+  /**
+   * Default false. Every plugin result that comes back as an error becomes a breadcrumb (category `cordova.plugin`, level `error`), on the
+   * native scope and on the first scope given to `bindScope`. Failures from before `start` are kept and added when this is true, and
+   * dropped when it is not. The call's arguments are never recorded. JavaScript only: native is not told.
+   */
+  recordPluginErrors?: boolean;
 }
 
 export interface SentrySdkUser {
@@ -222,6 +229,7 @@ const BOOLEAN_OPTIONS = [
   'attachStacktrace',
   'attachThreads',
   'enableNdkScopeSync',
+  'recordPluginErrors',
 ] as const;
 const COUNT_OPTIONS = ['maxBreadcrumbs', 'sessionTrackingIntervalMillis'] as const;
 
@@ -330,8 +338,151 @@ const checkExtras = (extras: Record<string, unknown>): Record<string, string | n
   return checked;
 };
 
+/**
+ * What the plugin-error recorder and `www/scope-sync` share. It lives on the global object because the two can be separate copies of the
+ * code: this file is Cordova's js-module, scope-sync is bundled into the app. `scopes` are the adders of the bound scopes, the first one
+ * gets the breadcrumbs, and `pending` holds them until there is one.
+ */
+interface PluginErrors {
+  mode: 'waiting' | 'on' | 'off';
+  waiting: SentrySdkBreadcrumb[];
+  pending: SentrySdkBreadcrumb[];
+  scopes: Array<(crumb: SentrySdkBreadcrumb) => void>;
+}
+
+const PLUGIN_ERRORS = Symbol.for('cordova-plugin-sentry-sdk.pluginErrors');
+const WRAPPED = Symbol.for('cordova-plugin-sentry-sdk.callbackFromNative');
+const KEPT = 100;
+const ERROR_LENGTH = 200;
+
+const pluginErrors = (): PluginErrors => {
+  const global = globalThis as unknown as Record<symbol, PluginErrors | undefined>;
+  return (global[PLUGIN_ERRORS] ??= { mode: 'waiting', waiting: [], pending: [], scopes: [] });
+};
+
+const keep = (list: SentrySdkBreadcrumb[], crumb: SentrySdkBreadcrumb): void => {
+  list.push(crumb);
+  if (list.length > KEPT) {
+    list.shift();
+  }
+};
+
+/** The first argument of a failed result as text: a string as it is, anything else as its JSON or what it prints as. */
+const errorText = (value: unknown): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  let text: string | undefined;
+  if (typeof value === 'string') {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = undefined;
+    }
+    if (text === undefined) {
+      try {
+        text = String(value);
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return text.slice(0, ERROR_LENGTH);
+};
+
+// Native gets its copy through the bridge directly, not through `call`: nobody waits for the answer, and a refusal is not the page's.
+const recordPluginError = (crumb: SentrySdkBreadcrumb): void => {
+  try {
+    cordova.exec(() => undefined, () => undefined, SERVICE, 'addBreadcrumb', [crumb]);
+  } catch {
+    // a recording that fails is not allowed to be the page's problem
+  }
+  const errors = pluginErrors();
+  const scope = errors.scopes[0];
+  if (!scope) {
+    keep(errors.pending, crumb);
+    return;
+  }
+  try {
+    scope(crumb);
+  } catch {
+    // as above
+  }
+};
+
+// A callback id is the plugin's service name and a counter (`Camera1234`), on both platforms. What the call was sent is not in a result,
+// and is never looked for: only the service, the status and the first argument of the answer are kept.
+const notePluginError = (callbackId: unknown, status: unknown, args: unknown): void => {
+  const errors = pluginErrors();
+  const service = String(callbackId).replace(/\d+$/, '');
+  if (errors.mode === 'off' || service === SERVICE) {
+    return;
+  }
+  const data: Record<string, unknown> = { service, status };
+  const error = errorText(Array.isArray(args) ? args[0] : undefined);
+  if (error !== undefined) {
+    data.error = error;
+  }
+  const crumb: SentrySdkBreadcrumb = {
+    category: 'cordova.plugin',
+    level: 'error',
+    message: `${service} answered with an error`,
+    timestamp: Date.now() / 1000,
+    data,
+  };
+  if (errors.mode === 'waiting') {
+    keep(errors.waiting, crumb);
+  } else {
+    recordPluginError(crumb);
+  }
+};
+
+// Both platforms' cordova.js hand every native result to `cordova.callbackFromNative`, looked up on the object at each call, so wrapping
+// the property sees every plugin, one that kept `cordova/exec` from before this loaded included. It is wrapped as this module loads, which
+// is before the app can call `start`, and once: a wrapper that is already there is left alone.
+const watchPluginResults = (): void => {
+  if (typeof cordova === 'undefined' || cordova === null) {
+    return;
+  }
+  const original = cordova.callbackFromNative;
+  if (typeof original !== 'function' || (original as unknown as Record<symbol, unknown>)[WRAPPED]) {
+    return;
+  }
+  const wrapped = function (this: unknown, ...args: unknown[]): unknown {
+    if (args[1] === false) {
+      try {
+        notePluginError(args[0], args[2], args[3]);
+      } catch {
+        // the bridge has to deliver the result whatever happens here
+      }
+    }
+    return (original as (...args: unknown[]) => unknown).apply(this, args);
+  };
+  (wrapped as unknown as Record<symbol, unknown>)[WRAPPED] = true;
+  cordova.callbackFromNative = wrapped as typeof original;
+};
+
+watchPluginResults();
+
+/** The last accepted `start` decides: what was kept before it is recorded when the option is on, and dropped with the recording when not. */
+const decidePluginErrors = (options: SentrySdkStartOptions): void => {
+  const errors = pluginErrors();
+  const on = typeof options === 'object' && options !== null && options.recordPluginErrors === true;
+  errors.mode = on ? 'on' : 'off';
+  const waiting = errors.waiting.splice(0);
+  if (on) {
+    waiting.forEach(recordPluginError);
+  }
+};
+
 /** Starts the native SDK. Call once, after `deviceready`; a second call is answered without restarting. */
-export const start = async (options: SentrySdkStartOptions) => call<SentrySdkStartAnswer>('start', checkStartOptions(options));
+export const start = async (options: SentrySdkStartOptions) =>
+  call<SentrySdkStartAnswer>('start', checkStartOptions(options)).then((answer) => {
+    decidePluginErrors(options);
+    return answer;
+  });
 
 /** Sets the user on the native scope, or clears it with `null`. */
 export const setUser = async (user: SentrySdkUser | null) => call<SentrySdkUserAnswer>('setUser', checkUser(user));
