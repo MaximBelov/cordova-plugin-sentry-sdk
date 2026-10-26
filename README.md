@@ -25,7 +25,7 @@ plugin built that way moves with every such change. This one calls only the publ
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
 | iOS | sentry-cocoa 9.30.2 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
-| Android | sentry-android 8.61.0 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
+| Android | sentry-android 8.61.1 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
 
 What the minimums rest on:
 
@@ -65,7 +65,7 @@ Variables, set with `cordova plugin add cordova-plugin-sentry-sdk --variable NAM
 
 | Variable | Default | |
 | --- | --- | --- |
-| `SENTRY_ANDROID_SDK_VERSION` | `8.61.0` | the sentry-android release |
+| `SENTRY_ANDROID_SDK_VERSION` | `8.61.1` | the sentry-android release |
 | `SENTRY_ANDROID_ARTIFACT` | `sentry-android-core` | `sentry-android-core` is the SDK: Java and Kotlin crashes, ANRs, and what this plugin calls. `sentry-android` adds the NDK module, which reports crashes in native C and C++ code from any library in the app, and Session Replay, which the plugin never turns on. It puts native libraries for every ABI into the APK, so take it when the app carries native code whose crashes you want. |
 
 The iOS version is pinned in `Package.swift`.
@@ -158,7 +158,7 @@ a DSN, send nothing and say so only in its log; the plugin checks with the SDK's
 | `enableNativeCrashHandling` | `true`. `false` turns off what reports a crash: on Android the handler for an uncaught exception, the ANR watch (so `enableAnrTracking` too) and the NDK integration, on iOS the crash handler. The plugin then sends what the page gives it and no crash | both |
 | `enableWatchdogTerminationTracking` | the SDK's `true`. The app was killed by the system, out of memory or hung, with no crash | iOS |
 | `debug` | `false`. The SDK writes what it does to the system log (logcat, the Xcode console) | both |
-| `sendDefaultPii` | `false`. The user's IP address and what else the SDK adds about a user beyond what [`setUser`](#setuser) sets. sentry-android deprecates the option in 8.61.0 for its finer data-collection options and still honours it | both |
+| `sendDefaultPii` | `false`. The user's IP address and what else the SDK adds about a user beyond what [`setUser`](#setuser) sets. sentry-android deprecates the option in 8.61.1 for its finer data-collection options and still honours it | both |
 | `maxBreadcrumbs` | the SDK's `100`. A whole number, 0 or more | both |
 | `sampleRate` | `1`. The share of error events that is sent, 0 to 1 | both |
 | `attachStacktrace` | the SDK's `true`. An event that has no exception gets the stack trace of where it was captured | both |
@@ -446,7 +446,7 @@ build that is minified (R8 or ProGuard). This plugin uploads nothing.
 
 What the SDKs print about themselves, with [`start`](#start)'s `debug` option on, goes to logcat on Android and to the console on iOS. The
 plugin does not forward it to the page, so a session that is debugged from the browser's DevTools does not see it; read it where it is written. This was
-checked against sentry-android 8.61.0 and sentry-cocoa 9.30.2, and left out on purpose:
+checked against sentry-android 8.61.1 and sentry-cocoa 9.30.2, and left out on purpose:
 
 - sentry-android takes a logger in its options, `SentryOptions.setLogger(ILogger)`, which is a stable API.
 - sentry-cocoa has one hook, `SentrySDK.internal.setLogOutput`. It is `public`, and its source says it is for hybrid SDKs and "may change,
@@ -461,7 +461,7 @@ If you need it, open an issue: the Android half is the easy one, and the iOS hal
 
 - sentry-cocoa is pinned exactly in `Package.swift`, and an app cannot override it: a fix in the SDK
   reaches your app through a release of this plugin.
-- sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.61.0 by default) and
+- sentry-android comes through two plugin variables, `SENTRY_ANDROID_SDK_VERSION` (8.61.1 by default) and
   `SENTRY_ANDROID_ARTIFACT`, and an app can install the plugin with others.
 - `test/unit/platform-parity.test.mjs` holds the pins of `plugin.xml`, `Package.swift`, `test/ios`
   and `test/android` together, and a weekly workflow opens a pull request that moves a pin when its SDK has a newer release, a major one too.
