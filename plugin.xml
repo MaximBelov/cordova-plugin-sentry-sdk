@@ -3,7 +3,7 @@
   <name>SentrySdk</name>
   <description>Starts sentry-cocoa and sentry-android through their public API, with the user, tags and contexts the JS SDK sets kept in sync</description>
 
-  <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.61.0" />
+  <preference name="SENTRY_ANDROID_SDK_VERSION" default="8.61.1" />
   <!-- Which sentry-android artifact the app takes. sentry-android-core is the SDK: Java and Kotlin crashes, ANRs, and what this plugin
        calls. sentry-android is the same plus the NDK module (crashes in native C and C++ code, from any library in the app) and Session
        Replay, which the plugin never turns on. The NDK is a set of native libraries per ABI in every APK, so it is opt-in. -->
