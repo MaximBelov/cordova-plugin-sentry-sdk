@@ -15,7 +15,7 @@ Why not [sentry-cordova](https://github.com/getsentry/sentry-cordova)? Sentry ar
 (its last release, 1.7.3, is from October 2025). Its iOS code pushes the page's envelopes through the
 native SDK with `PrivateSentrySDKOnly` and imports private headers (`SentryOptionsInternal.h`), and
 sentry-cocoa replaced `PrivateSentrySDKOnly` with `SentrySDK.internal` in 9.19.0, a minor release
-([changelog](https://github.com/getsentry/sentry-cocoa/blob/9.30.2/CHANGELOG.md)), and 9.30.2 no longer contains it. A
+([changelog](https://github.com/getsentry/sentry-cocoa/blob/9.31.0/CHANGELOG.md)), and 9.31.0 no longer contains it. A
 plugin built that way moves with every such change. This one calls only the public API of the two SDKs
 (`SentrySDK.start`, `setUser`, `configureScope`; `SentryAndroid.init`, `Sentry.setUser`, `setTag`,
 `configureScope`), so a new major of an SDK changes what it calls, not what it reaches into.
@@ -24,7 +24,7 @@ plugin built that way moves with every such change. This one calls only the publ
 
 | Platform | SDK | How it is taken | Minimum |
 | --- | --- | --- | --- |
-| iOS | sentry-cocoa 9.30.2 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
+| iOS | sentry-cocoa 9.31.0 | Swift package (`Package.swift`), prebuilt xcframework from SPM; no CocoaPods, no Carthage | cordova-ios 8.0.1, iOS 15, Xcode 26 |
 | Android | sentry-android 8.61.0 | `io.sentry:sentry-android-core` from Maven (`SENTRY_ANDROID_SDK_VERSION`, `SENTRY_ANDROID_ARTIFACT`) | cordova-android 15.1.0 |
 
 What the minimums rest on:
@@ -42,7 +42,7 @@ What the minimums rest on:
   (GitHub Actions run 38413045350, whose log is no longer available), and Xcode 26 resolved it. Why they differ is not
   established: the manifests sentry-cocoa ships for SwiftPM 6.1 and 6.2 declare that dependency the same way.
 - **A Swift package, not CocoaPods.** The newest `Sentry` pod on the CocoaPods trunk is 9.19.1, published on 2026-07-01
-  (checked on 2026-10-14 at `https://trunk.cocoapods.org/api/v1/pods/Sentry`), while sentry-cocoa is at 9.30.2.
+  (checked on 2026-10-14 at `https://trunk.cocoapods.org/api/v1/pods/Sentry`), while sentry-cocoa is at 9.31.0.
 
 What the plugin asks of the app's build, and what the app keeps:
 
@@ -446,7 +446,7 @@ build that is minified (R8 or ProGuard). This plugin uploads nothing.
 
 What the SDKs print about themselves, with [`start`](#start)'s `debug` option on, goes to logcat on Android and to the console on iOS. The
 plugin does not forward it to the page, so a session that is debugged from the browser's DevTools does not see it; read it where it is written. This was
-checked against sentry-android 8.61.0 and sentry-cocoa 9.30.2, and left out on purpose:
+checked against sentry-android 8.61.0 and sentry-cocoa 9.31.0, and left out on purpose:
 
 - sentry-android takes a logger in its options, `SentryOptions.setLogger(ILogger)`, which is a stable API.
 - sentry-cocoa has one hook, `SentrySDK.internal.setLogOutput`. It is `public`, and its source says it is for hybrid SDKs and "may change,
