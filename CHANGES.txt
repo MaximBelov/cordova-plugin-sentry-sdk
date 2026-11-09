@@ -1,4 +1,5 @@
 = next =
+iOS: sentry-cocoa 9.33.0 (it was 9.32.0)
 iOS: sentry-cocoa 9.32.0 (it was 9.31.0)
 iOS: sentry-cocoa 9.31.0 (it was 9.30.2)
 
