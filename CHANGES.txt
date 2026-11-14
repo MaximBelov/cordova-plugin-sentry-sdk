@@ -1,7 +1,6 @@
-= next =
-Android: sentry-android 8.63.0 (it was 8.61.0)
-iOS: sentry-cocoa 9.32.0 (it was 9.31.0)
-iOS: sentry-cocoa 9.31.0 (it was 9.30.2)
+= 0.4.1 =
+iOS: sentry-cocoa 9.34.0 (it was 9.30.2 in 0.4.0, through 9.31.0, 9.32.0 and 9.33.0). Among its fixes: a deadlock of the crash handler on an uncaught C++ exception, a crash at SDK start on a stored crash report that is a JSON array, and a crash in file I/O tracing on a nil URL. Its new features (WebView trace propagation, scope persistence, MetricKit reports) are opt-in and this plugin turns none of them on
+Android: sentry-android 8.64.0 (it was 8.61.0 in 0.4.0, through 8.63.0). It no longer waits on the network and telephony listeners at init, so Sentry.init cannot hang the main thread on a slow device, and it makes its internal sentry-android-core classes final, which this plugin does not subclass
 
 = 0.4.0 =
 start takes recordPluginErrors, default false: every plugin result that comes back as an error becomes a breadcrumb (category cordova.plugin, level error, message "<service> answered with an error", data service, status and the first value of the answer as text, cut to 200 characters; never the call's arguments), on the native scope and on the first scope given to bindScope, which takes it without sending it back to native. cordova.callbackFromNative is wrapped once as the plugin's JavaScript loads, so failures before start are kept, the last hundred, and added by a start with the option or dropped by one without. The result is delivered as it was, a failure while recording is swallowed, and this plugin's own results are not recorded
